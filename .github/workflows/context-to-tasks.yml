@@ -1,0 +1,108 @@
+name: Context to Tasks Orchestrator
+
+on:
+  workflow_dispatch:
+    inputs:
+      context:
+        description: 'Project context or requirements to decompose'
+        required: true
+        type: string
+      max_tasks:
+        description: 'Maximum number of tasks to create'
+        required: false
+        default: '10'
+        type: string
+  issues:
+    types: [opened, edited]
+
+env:
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  decompose-and-create-issues:
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' || 
+      (github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'context-input'))
+    
+    permissions:
+      issues: write
+      contents: read
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install claude-code PyGithub pyyaml
+      
+      - name: Extract context
+        id: extract_context
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "CONTEXT=${{ github.event.inputs.context }}" >> $GITHUB_ENV
+            echo "MAX_TASKS=${{ github.event.inputs.max_tasks }}" >> $GITHUB_ENV
+          else
+            # Extract context from issue body
+            echo "CONTEXT<<EOF" >> $GITHUB_ENV
+            echo "${{ github.event.issue.body }}" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
+            echo "MAX_TASKS=10" >> $GITHUB_ENV
+            echo "PARENT_ISSUE=${{ github.event.issue.number }}" >> $GITHUB_ENV
+          fi
+      
+      - name: Decompose context into tasks
+        id: decompose
+        run: |
+          python scripts/task-decomposer.py \
+            --context "${{ env.CONTEXT }}" \
+            --max-tasks "${{ env.MAX_TASKS }}" \
+            --output tasks.json
+      
+      - name: Create GitHub issues for tasks
+        run: |
+          python scripts/issue-creator.py \
+            --tasks-file tasks.json \
+            --repo "${{ github.repository }}" \
+            --parent-issue "${{ env.PARENT_ISSUE }}" \
+            --auto-implement true
+      
+      - name: Post summary comment
+        if: env.PARENT_ISSUE != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const tasks = JSON.parse(fs.readFileSync('tasks.json', 'utf8'));
+            const issueNumbers = JSON.parse(fs.readFileSync('created_issues.json', 'utf8'));
+            
+            let comment = '## 🤖 Task Decomposition Complete\n\n';
+            comment += `Created ${issueNumbers.length} implementation tasks:\n\n`;
+            
+            issueNumbers.forEach((issueNum, idx) => {
+              comment += `- [ ] #${issueNum}: ${tasks.tasks[idx].title}\n`;
+            });
+            
+            comment += '\n---\n*Each task will automatically trigger Claude to create a PR.*';
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ env.PARENT_ISSUE }},
+              body: comment
+            });
+      
+      - name: Upload task artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: task-decomposition
+          path: |
+            tasks.json
+            created_issues.json
