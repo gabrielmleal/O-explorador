@@ -18,6 +18,7 @@ public class GerenciadorEstado {
     
     public static final int ESTADO_MENU=0;
     public static final int ESTADO_LEVEL_1=1;
+    public static final int ESTADO_AJUDA=2;
     
     private ArrayList<Estado> estados;
     private int estadoAtual;
@@ -30,6 +31,7 @@ public class GerenciadorEstado {
         
         estados.add(new EstadoMenu(this));
         estados.add(new Estado_Level1(this));
+        estados.add(new EstadoAjuda(this));
     }
     
     public void mudarEstado(int estado){
