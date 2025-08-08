@@ -104,14 +104,16 @@ class IssueCreator:
                         task_to_issue_map
                     )
         
-        # Save the mapping for reference
+        # Always save the mapping for reference, even if empty
+        with open("created_issues.json", "w") as f:
+            json.dump(created_issues, f, indent=2)
+        
         if created_issues:
-            with open("created_issues.json", "w") as f:
-                json.dump(created_issues, f, indent=2)
-            
             print(f"\nCreated {len(created_issues)} issues:", file=sys.stderr)
             for issue_num in created_issues:
                 print(f"  - Issue #{issue_num}", file=sys.stderr)
+        else:
+            print("\nNo issues were created", file=sys.stderr)
         
         return created_issues
     
