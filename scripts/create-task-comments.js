@@ -1,18 +1,17 @@
 const fs = require('fs');
-const settings = require('./workflow-settings');
 
-module.exports = async ({ github, context }) => {
+module.exports = async ({ github, context, core }) => {
   // Check if tasks.json exists
   if (!fs.existsSync('tasks.json')) {
     console.log('❌ tasks.json not found - Claude Code may have failed to generate the file');
     
-    const parentIssue = process.env.PARENT_ISSUE_NUMBER;
+    const parentIssue = process.env.PARENT_ISSUE_NUMBER || context.payload.issue?.number;
     if (parentIssue) {
       await github.rest.issues.createComment({
         owner: context.repo.owner,
         repo: context.repo.repo,
         issue_number: parseInt(parentIssue),
-        body: settings.messages.noTasksFile
+        body: '❌ **Task decomposition failed** - Claude Code was unable to generate the tasks.json file. Please check the context input and try again.'
       });
     }
     
@@ -27,13 +26,13 @@ module.exports = async ({ github, context }) => {
   } catch (error) {
     console.log('❌ Failed to parse tasks.json:', error.message);
     
-    const parentIssue = process.env.PARENT_ISSUE_NUMBER;
+    const parentIssue = process.env.PARENT_ISSUE_NUMBER || context.payload.issue?.number;
     if (parentIssue) {
       await github.rest.issues.createComment({
         owner: context.repo.owner,
         repo: context.repo.repo,
         issue_number: parseInt(parentIssue),
-        body: settings.messages.invalidJson(error.message)
+        body: `❌ **Task decomposition failed** - tasks.json file is invalid: ${error.message}`
       });
     }
     
@@ -50,7 +49,7 @@ module.exports = async ({ github, context }) => {
   }
 
   const tasks = tasksData.tasks;
-  const parentIssue = tasksData.parent_issue;
+  const parentIssue = process.env.PARENT_ISSUE_NUMBER || tasksData.parent_issue || context.payload.issue?.number;
 
   // Validate individual tasks
   for (let i = 0; i < tasks.length; i++) {
@@ -68,62 +67,55 @@ module.exports = async ({ github, context }) => {
     return [];
   }
 
-  console.log(`Creating ${tasks.length} issues...`);
-  const createdIssues = [];
+  console.log(`Creating ${tasks.length} task comments...`);
+  const createdTasks = [];
 
-  // Create issues for each task
+  // Create task progress tracking comment first
+  const progressComment = await github.rest.issues.createComment({
+    owner: context.repo.owner,
+    repo: context.repo.repo,
+    issue_number: parseInt(parentIssue),
+    body: `## 🤖 Task Decomposition Complete
+
+Created ${tasks.length} implementation tasks:
+
+${tasks.map((task, i) => `- [ ] **Task ${i + 1}**: ${task.title}`).join('\n')}
+
+${'---'}
+*Each task will automatically trigger Claude to create a PR when the task comment is created.*`
+  });
+
+  // Create individual task comments
   for (let i = 0; i < tasks.length; i++) {
     const task = tasks[i];
-    
-    // Add parent reference if applicable
-    let issueBody = task.body;
-    if (parentIssue) {
-      issueBody += `\n\n---\n*Part of #${parentIssue}*`;
-    }
-    
-    // MANDATORY: Add @claude mention to trigger automation
-    issueBody += `\n\n@claude Please implement this task.`;
+    const taskData = {
+      id: i + 1,
+      title: task.title,
+      body: task.body,
+      status: 'pending',
+      parent_issue: parseInt(parentIssue)
+    };
     
     try {
-      const { data: issue } = await github.rest.issues.create({
+      const comment = await github.rest.issues.createComment({
         owner: context.repo.owner,
         repo: context.repo.repo,
-        title: task.title,
-        body: issueBody,
-        labels: settings.issueLabels
+        issue_number: parseInt(parentIssue),
+        body: `🤖 TASK-${i + 1}: ${JSON.stringify(taskData, null, 2)}`
       });
       
-      createdIssues.push(issue.number);
-      console.log(`✅ Created issue #${issue.number}: ${task.title}`);
+      createdTasks.push(taskData.id);
+      console.log(`✅ Created task comment ${i + 1}: ${task.title}`);
       
     } catch (error) {
-      console.log(`❌ Failed to create issue: ${task.title}`);
+      console.log(`❌ Failed to create task comment: ${task.title}`);
       console.log(error.message);
     }
   }
 
-  // Save created issues for summary
-  fs.writeFileSync('created_issues.json', JSON.stringify(createdIssues, null, 2));
+  // Save created tasks info for artifacts
+  fs.writeFileSync('created_tasks.json', JSON.stringify(createdTasks, null, 2));
 
-  // Post summary comment on parent issue if applicable
-  if (parentIssue && createdIssues.length > 0) {
-    let comment = settings.messages.taskComplete(createdIssues.length);
-    
-    createdIssues.forEach((issueNum, idx) => {
-      const taskTitle = tasks[idx]?.title || `Task ${idx + 1}`;
-      comment += `- [ ] #${issueNum}: ${taskTitle}\n`;
-    });
-    
-    comment += settings.messages.taskFooter;
-    
-    await github.rest.issues.createComment({
-      owner: context.repo.owner,
-      repo: context.repo.repo,
-      issue_number: parentIssue,
-      body: comment
-    });
-  }
-
-  console.log(`✅ Successfully created ${createdIssues.length} issues`);
-  return createdIssues;
+  console.log(`✅ Successfully created ${createdTasks.length} task comments`);
+  return createdTasks;
 };
