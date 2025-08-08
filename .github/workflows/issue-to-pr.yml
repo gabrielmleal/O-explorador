@@ -5,7 +5,7 @@ on:
     types: [opened, labeled]
 
 env:
-  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
 jobs:
   create-pr-from-issue:
@@ -20,6 +20,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
       
       - name: Install Claude Code CLI
         run: |
@@ -62,7 +67,7 @@ jobs:
           If tests are needed, create them.
           Make sure to handle edge cases and add appropriate error handling."
           
-          # Execute Claude Code
+          # Execute Claude Code with OAuth token
           claude-code --query "$PROMPT" \
             --output-mode text \
             --turns 3 \
@@ -75,6 +80,8 @@ jobs:
           else
             echo "changes_made=false" >> $GITHUB_OUTPUT
           fi
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
       
       - name: Commit changes
         if: steps.implement.outputs.changes_made == 'true'

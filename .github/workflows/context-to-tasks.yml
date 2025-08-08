@@ -16,7 +16,7 @@ on:
     types: [opened, edited]
 
 env:
-  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
@@ -39,9 +39,15 @@ jobs:
         with:
           python-version: '3.11'
       
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      
       - name: Install dependencies
         run: |
-          pip install claude-code PyGithub pyyaml
+          pip install PyGithub pyyaml
+          npm install -g claude-code
       
       - name: Extract context
         id: extract_context
@@ -65,6 +71,8 @@ jobs:
             --context "${{ env.CONTEXT }}" \
             --max-tasks "${{ env.MAX_TASKS }}" \
             --output tasks.json
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
       
       - name: Create GitHub issues for tasks
         run: |

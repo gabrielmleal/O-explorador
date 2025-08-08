@@ -9,27 +9,23 @@ import json
 import os
 import sys
 import yaml
+import subprocess
+import tempfile
 from typing import List, Dict, Any
 from pathlib import Path
-
-try:
-    from claude_code import ClaudeCodeSession
-except ImportError:
-    print("Error: claude-code package not installed. Run: pip install claude-code", file=sys.stderr)
-    sys.exit(1)
 
 
 class TaskDecomposer:
     """Decomposes project context into actionable development tasks"""
     
-    def __init__(self, api_key: str = None, config_path: str = None):
-        """Initialize the task decomposer with API key and optional config"""
-        self.api_key = api_key or os.environ.get('ANTHROPIC_API_KEY')
-        if not self.api_key:
-            raise ValueError("ANTHROPIC_API_KEY not found in environment variables")
+    def __init__(self, oauth_token: str = None, config_path: str = None):
+        """Initialize the task decomposer with OAuth token and optional config"""
+        self.oauth_token = oauth_token or os.environ.get('CLAUDE_CODE_OAUTH_TOKEN')
+        if not self.oauth_token:
+            raise ValueError("CLAUDE_CODE_OAUTH_TOKEN not found in environment variables")
         
         self.config = self._load_config(config_path) if config_path else {}
-        self.session = None
+        self._setup_claude_cli()
     
     def _load_config(self, config_path: str) -> Dict[str, Any]:
         """Load configuration from YAML file"""
@@ -39,9 +35,28 @@ class TaskDecomposer:
                 return yaml.safe_load(f) or {}
         return {}
     
+    def _setup_claude_cli(self):
+        """Setup Claude Code CLI authentication"""
+        try:
+            # Set environment variable for Claude CLI
+            os.environ['CLAUDE_CODE_OAUTH_TOKEN'] = self.oauth_token
+            
+            # Test CLI access
+            result = subprocess.run(
+                ['claude-code', '--version'],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            
+            if result.returncode != 0:
+                print(f"Warning: Claude Code CLI not accessible: {result.stderr}", file=sys.stderr)
+        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+            print(f"Warning: Cannot verify Claude Code CLI: {e}", file=sys.stderr)
+    
     def decompose(self, context: str, max_tasks: int = 10) -> Dict[str, Any]:
         """
-        Decompose context into tasks using Claude
+        Decompose context into tasks using Claude Code CLI
         
         Args:
             context: The project context or requirements to decompose
@@ -60,15 +75,9 @@ class TaskDecomposer:
         # Construct the decomposition prompt
         prompt = self._build_decomposition_prompt(context, project_context, max_tasks)
         
-        # Use Claude Code SDK to analyze and decompose
-        session = ClaudeCodeSession(api_key=self.api_key)
-        
         try:
-            response = session.query(
-                prompt,
-                output_mode="json",
-                system_prompt="You are a senior software architect skilled at breaking down complex requirements into implementable tasks."
-            )
+            # Use Claude Code CLI to analyze and decompose
+            response = self._call_claude_cli(prompt)
             
             # Parse and validate the response
             tasks_data = self._parse_response(response)
@@ -87,6 +96,33 @@ class TaskDecomposer:
                 "tasks": [],
                 "context_summary": context[:200]
             }
+    
+    def _call_claude_cli(self, prompt: str) -> str:
+        """Call Claude Code CLI with the given prompt"""
+        try:
+            # Call Claude Code CLI
+            result = subprocess.run([
+                'claude-code',
+                '--query', prompt,
+                '--output-mode', 'text',
+                '--turns', '1',
+                '--yes'
+            ], 
+            capture_output=True, 
+            text=True, 
+            timeout=300,
+            env=dict(os.environ, CLAUDE_CODE_OAUTH_TOKEN=self.oauth_token)
+            )
+            
+            if result.returncode != 0:
+                raise RuntimeError(f"Claude CLI failed: {result.stderr}")
+            
+            return result.stdout.strip()
+                
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("Claude CLI call timed out after 5 minutes")
+        except FileNotFoundError:
+            raise RuntimeError("Claude Code CLI not found. Please install it first.")
     
     def _build_decomposition_prompt(self, context: str, project_context: str, max_tasks: int) -> str:
         """Build the prompt for task decomposition"""
@@ -269,8 +305,8 @@ def main():
         help='Path to configuration file'
     )
     parser.add_argument(
-        '--api-key',
-        help='Anthropic API key (defaults to ANTHROPIC_API_KEY env var)'
+        '--oauth-token',
+        help='Claude Code OAuth token (defaults to CLAUDE_CODE_OAUTH_TOKEN env var)'
     )
     
     args = parser.parse_args()
@@ -278,7 +314,7 @@ def main():
     try:
         # Initialize decomposer
         decomposer = TaskDecomposer(
-            api_key=args.api_key,
+            oauth_token=getattr(args, 'oauth_token', None),
             config_path=args.config
         )
         
