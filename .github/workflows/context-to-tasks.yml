@@ -26,6 +26,7 @@ jobs:
       contents: read
       issues: write
       id-token: write
+      actions: read
     
     steps:
       - name: Checkout repository
@@ -56,10 +57,11 @@ jobs:
           PARENT_ISSUE_NUMBER: ${{ github.event.issue.number }}
         with:
           script: |
-            const createIssues = require('./scripts/create-issues.js');
+            const path = require('path');
+            const createIssues = require(path.join(process.cwd(), 'scripts', 'create-issues.js'));
             
             try {
-              await createIssues({ github, context });
+              await createIssues({ github, context, core });
             } catch (error) {
               console.log('❌ Issue creation failed:', error.message);
               core.setFailed(error.message);

@@ -94,3 +94,5 @@ As a [user type], I want to [action] so that [benefit].
 3. Trigger Claude to create PRs implementing each task
 
 You can monitor progress in the comments below.
+
+@claude Please analyze this context and create implementation tasks.
