@@ -1,7 +1,7 @@
 const { execSync } = require('child_process');
 
-module.exports = async ({ github, context, taskData, taskId }) => {
-  const issueNumber = context.payload.issue.number;
+module.exports = async ({ github, context, taskData, taskId, commentId }) => {
+  const issueNumber = context.payload.client_payload.issue_number;
   
   // Check if any files were modified
   const status = execSync('git status --porcelain', { encoding: 'utf8' });
@@ -10,12 +10,14 @@ module.exports = async ({ github, context, taskData, taskId }) => {
     
     // Update task comment status
     taskData.status = 'no-changes';
-    const updatedComment = `🤖 TASK-${taskId}: ${JSON.stringify(taskData, null, 2)}`;
+    const updatedComment = `🤖 TASK-${taskId}: ${JSON.stringify(taskData, null, 2)}
+
+@claude Please implement this task.`;
     
     await github.rest.issues.updateComment({
       owner: context.repo.owner,
       repo: context.repo.repo,
-      comment_id: context.payload.comment.id,
+      comment_id: commentId,
       body: updatedComment
     });
     
@@ -80,12 +82,14 @@ ${'---'}
   // Update task status to completed
   taskData.status = 'completed';
   taskData.pr_number = pr.number;
-  const updatedComment = `🤖 TASK-${taskId}: ${JSON.stringify(taskData, null, 2)}`;
+  const updatedComment = `🤖 TASK-${taskId}: ${JSON.stringify(taskData, null, 2)}
+
+@claude Please implement this task.`;
   
   await github.rest.issues.updateComment({
     owner: context.repo.owner,
     repo: context.repo.repo,
-    comment_id: context.payload.comment.id,
+    comment_id: commentId,
     body: updatedComment
   });
 

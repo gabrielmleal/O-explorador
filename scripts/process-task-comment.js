@@ -1,40 +1,33 @@
-const { execSync } = require('child_process');
-
-module.exports = async ({ github, context, core }) => {
-  // Extract task data from comment
-  const commentBody = context.payload.comment.body;
-  console.log('Comment body:', commentBody);
+module.exports = async ({ github, context }) => {
+  // Extract task data from repository dispatch payload
+  const clientPayload = context.payload.client_payload;
+  console.log('Client payload:', clientPayload);
   
-  // Parse task JSON from comment
-  const taskMatch = commentBody.match(/🤖 TASK-(\d+): ({[\s\S]*})/);
-  if (!taskMatch) {
-    throw new Error('Could not parse task data from comment');
+  if (!clientPayload || !clientPayload.task_data || !clientPayload.task_id) {
+    throw new Error('Missing required task data in repository dispatch payload');
   }
   
-  const taskId = taskMatch[1];
-  let taskData;
-  
-  try {
-    taskData = JSON.parse(taskMatch[2]);
-  } catch (error) {
-    throw new Error(`Failed to parse task JSON: ${error.message}`);
-  }
+  const taskData = clientPayload.task_data;
+  const taskId = clientPayload.task_id;
+  const commentId = clientPayload.comment_id;
   
   console.log('Parsed task data:', taskData);
   
   // Update task status to in-progress
   taskData.status = 'in-progress';
-  const updatedComment = `🤖 TASK-${taskId}: ${JSON.stringify(taskData, null, 2)}`;
+  const updatedComment = `🤖 TASK-${taskId}: ${JSON.stringify(taskData, null, 2)}
+
+@claude Please implement this task.`;
   
   await github.rest.issues.updateComment({
     owner: context.repo.owner,
     repo: context.repo.repo,
-    comment_id: context.payload.comment.id,
+    comment_id: commentId,
     body: updatedComment
   });
   
   console.log('Task status updated to in-progress');
   
   // Return task data for next steps
-  return { taskData, taskId };
+  return { taskData, taskId, commentId };
 };
