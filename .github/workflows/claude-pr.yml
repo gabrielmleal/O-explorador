@@ -112,10 +112,11 @@ jobs:
           If code changes are needed, make them directly.
           Be concise but thorough."
           
-          # Execute Claude Code with OAuth token
+          # Execute Claude Code with OAuth token and specify Claude Sonnet 4
           claude-code --query "$PROMPT" \
             --output-mode text \
             --turns 2 \
+            --model claude-sonnet-4-20250514 \
             --yes \
             > claude_response.log 2>&1
           

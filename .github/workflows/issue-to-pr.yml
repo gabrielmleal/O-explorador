@@ -68,10 +68,11 @@ jobs:
           If tests are needed, create them.
           Make sure to handle edge cases and add appropriate error handling."
           
-          # Execute Claude Code with OAuth token
+          # Execute Claude Code with OAuth token and specify Claude Sonnet 4
           claude-code --query "$PROMPT" \
             --output-mode text \
             --turns 3 \
+            --model claude-sonnet-4-20250514 \
             --yes \
             > implementation.log 2>&1
           

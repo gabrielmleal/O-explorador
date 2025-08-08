@@ -24,9 +24,9 @@ class TaskDecomposer:
     
     def __init__(self, oauth_token: str = None, config_path: str = None):
         """Initialize the task decomposer with OAuth token and optional config"""
-        self.oauth_token = oauth_token or os.environ.get('CLAUDE_CODE_OAUTH_TOKEN') or os.environ.get('ANTHROPIC_API_KEY')
+        self.oauth_token = oauth_token or os.environ.get('CLAUDE_CODE_OAUTH_TOKEN')
         if not self.oauth_token:
-            raise ValueError("CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY not found in environment variables")
+            raise ValueError("CLAUDE_CODE_OAUTH_TOKEN not found in environment variables. Please set up Claude Code OAuth authentication.")
         
         self.config = self._load_config(config_path) if config_path else {}
         self.client = Anthropic(api_key=self.oauth_token)
@@ -44,7 +44,7 @@ class TaskDecomposer:
         try:
             # Test API access with a simple request
             self.client.messages.create(
-                model="claude-3-haiku-20240307",
+                model="claude-sonnet-4-20250514",
                 max_tokens=10,
                 messages=[{"role": "user", "content": "test"}]
             )
@@ -100,7 +100,7 @@ class TaskDecomposer:
         try:
             # Call Anthropic API
             response = self.client.messages.create(
-                model="claude-3-sonnet-20240229",
+                model="claude-sonnet-4-20250514",
                 max_tokens=4000,
                 temperature=0.1,
                 messages=[
@@ -298,7 +298,7 @@ def main():
     )
     parser.add_argument(
         '--oauth-token',
-        help='Claude/Anthropic API token (defaults to CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY env var)'
+        help='Claude Code OAuth token (defaults to CLAUDE_CODE_OAUTH_TOKEN env var)'
     )
     
     args = parser.parse_args()
