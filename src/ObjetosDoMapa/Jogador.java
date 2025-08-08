@@ -27,6 +27,10 @@ public class Jogador extends ObjetoMapa {
     private boolean morto, imune;
     private long temporizadorImune;
     
+    //atributos do pulo duplo
+    private boolean podeUsarPuloDuplo;
+    private boolean puloDuploUsado;
+    
     //Atributos de ataques e ações do jogador
     private boolean atirando, atirou, atacando, correndo, terminando;
     private double atacaAlcance;
@@ -64,6 +68,10 @@ public class Jogador extends ObjetoMapa {
         vida = maxVida = 5;
         flechas = new ArrayList<>();
         atirou = false;
+        
+        //inicializa pulo duplo
+        podeUsarPuloDuplo = false;
+        puloDuploUsado = false;
         
         atacaAlcance = 35;
         
@@ -107,6 +115,30 @@ public class Jogador extends ObjetoMapa {
     }
     public void corre(boolean b){ correndo = b;}
     
+    public void tentarPuloDuplo(){
+        if(podeUsarPuloDuplo && !puloDuploUsado && (acaoAtual == PULANDO || acaoAtual == CAINDO)){
+            dy = comecoPulo;
+            caindo = true;
+            pulando = true;
+            puloDuploUsado = true;
+        }
+    }
+    
+    public void resetarPuloDuplo(){
+        podeUsarPuloDuplo = false;
+        puloDuploUsado = false;
+    }
+    
+    @Override
+    public void checaColisaoComMapa(){
+        super.checaColisaoComMapa();
+        
+        // reseta pulo duplo quando aterrissa (dy era > 0 e agora caindo=false)
+        if(!caindo && dy == 0){
+            resetarPuloDuplo();
+        }
+    }
+    
     public void calculaVelocidade(){
         
         double velMaxMovimento = this.velMaxMovimento;
@@ -141,6 +173,8 @@ public class Jogador extends ObjetoMapa {
         if(pulando && !caindo){
             dy = comecoPulo;
             caindo = true;
+            // habilita pulo duplo quando faz o primeiro pulo
+            podeUsarPuloDuplo = true;
         }
         
         if(caindo){
