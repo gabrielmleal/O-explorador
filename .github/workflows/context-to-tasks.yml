@@ -73,29 +73,87 @@ jobs:
             --output tasks.json
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        continue-on-error: true
       
       - name: Create GitHub issues for tasks
+        id: create_issues
         run: |
           python scripts/issue-creator.py \
             --tasks-file tasks.json \
             --repo "${{ github.repository }}" \
             --parent-issue "${{ env.PARENT_ISSUE }}" \
             --auto-implement true
+        continue-on-error: true
+      
+      - name: Debug workflow files
+        if: always()
+        run: |
+          echo "=== Workflow Debug Information ==="
+          echo "Current directory: $(pwd)"
+          echo "Available files:"
+          ls -la
+          echo ""
+          echo "=== Task decomposition output ==="
+          if [ -f "tasks.json" ]; then
+            echo "✅ tasks.json exists"
+            echo "File size: $(wc -c < tasks.json) bytes"
+            echo "Content preview:"
+            head -20 tasks.json
+          else
+            echo "❌ tasks.json missing"
+          fi
+          echo ""
+          echo "=== Issue creation output ==="
+          if [ -f "created_issues.json" ]; then
+            echo "✅ created_issues.json exists" 
+            echo "Content:"
+            cat created_issues.json
+          else
+            echo "❌ created_issues.json missing"
+          fi
+          echo ""
+          echo "=== Environment variables ==="
+          echo "PARENT_ISSUE: ${{ env.PARENT_ISSUE }}"
+          echo "CONTEXT length: ${#CONTEXT}"
       
       - name: Post summary comment
-        if: env.PARENT_ISSUE != ''
+        if: env.PARENT_ISSUE != '' && (steps.create_issues.outcome == 'success' || steps.create_issues.outcome == 'failure')
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
+            
+            // Check if required files exist
+            if (!fs.existsSync('tasks.json')) {
+              console.log('❌ tasks.json not found - task decomposition may have failed');
+              return;
+            }
+            
+            if (!fs.existsSync('created_issues.json')) {
+              console.log('❌ created_issues.json not found - issue creation may have failed');
+              return;
+            }
+            
             const tasks = JSON.parse(fs.readFileSync('tasks.json', 'utf8'));
             const issueNumbers = JSON.parse(fs.readFileSync('created_issues.json', 'utf8'));
+            
+            if (!issueNumbers || issueNumbers.length === 0) {
+              console.log('⚠️ No issues were created');
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: process.env.PARENT_ISSUE,
+                body: '## 🤖 Task Decomposition Complete\n\n⚠️ No implementation tasks were created. This could be due to:\n- Empty or invalid context\n- Task decomposition errors\n- GitHub API issues\n\nPlease check the workflow logs for details.'
+              });
+              return;
+            }
             
             let comment = '## 🤖 Task Decomposition Complete\n\n';
             comment += `Created ${issueNumbers.length} implementation tasks:\n\n`;
             
             issueNumbers.forEach((issueNum, idx) => {
-              comment += `- [ ] #${issueNum}: ${tasks.tasks[idx].title}\n`;
+              const taskTitle = tasks.tasks && tasks.tasks[idx] ? tasks.tasks[idx].title : `Task ${idx + 1}`;
+              comment += `- [ ] #${issueNum}: ${taskTitle}\n`;
             });
             
             comment += '\n---\n*Each task will automatically trigger Claude to create a PR.*';
@@ -103,7 +161,7 @@ jobs:
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: ${{ env.PARENT_ISSUE }},
+              issue_number: process.env.PARENT_ISSUE,
               body: comment
             });
       

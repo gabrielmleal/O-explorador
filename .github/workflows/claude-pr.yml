@@ -78,6 +78,7 @@ jobs:
       
       - name: Execute Claude command
         id: claude_response
+        continue-on-error: true
         run: |
           # Read any CLAUDE.md for context
           CONTEXT=""
