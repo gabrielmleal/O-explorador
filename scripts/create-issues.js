@@ -81,6 +81,9 @@ module.exports = async ({ github, context }) => {
       issueBody += `\n\n---\n*Part of #${parentIssue}*`;
     }
     
+    // MANDATORY: Add @claude mention to trigger automation
+    issueBody += `\n\n@claude Please implement this task.`;
+    
     try {
       const { data: issue } = await github.rest.issues.create({
         owner: context.repo.owner,
