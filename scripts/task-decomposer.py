@@ -9,10 +9,14 @@ import json
 import os
 import sys
 import yaml
-import subprocess
-import tempfile
 from typing import List, Dict, Any
 from pathlib import Path
+
+try:
+    from anthropic import Anthropic
+except ImportError:
+    print("Error: anthropic SDK not installed. Run: pip install anthropic", file=sys.stderr)
+    sys.exit(1)
 
 
 class TaskDecomposer:
@@ -20,12 +24,12 @@ class TaskDecomposer:
     
     def __init__(self, oauth_token: str = None, config_path: str = None):
         """Initialize the task decomposer with OAuth token and optional config"""
-        self.oauth_token = oauth_token or os.environ.get('CLAUDE_CODE_OAUTH_TOKEN')
+        self.oauth_token = oauth_token or os.environ.get('CLAUDE_CODE_OAUTH_TOKEN') or os.environ.get('ANTHROPIC_API_KEY')
         if not self.oauth_token:
-            raise ValueError("CLAUDE_CODE_OAUTH_TOKEN not found in environment variables")
+            raise ValueError("CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY not found in environment variables")
         
         self.config = self._load_config(config_path) if config_path else {}
-        self._setup_claude_cli()
+        self.client = Anthropic(api_key=self.oauth_token)
     
     def _load_config(self, config_path: str) -> Dict[str, Any]:
         """Load configuration from YAML file"""
@@ -35,24 +39,18 @@ class TaskDecomposer:
                 return yaml.safe_load(f) or {}
         return {}
     
-    def _setup_claude_cli(self):
-        """Setup Claude Code CLI authentication"""
+    def _test_anthropic_connection(self):
+        """Test connection to Anthropic API"""
         try:
-            # Set environment variable for Claude CLI
-            os.environ['CLAUDE_CODE_OAUTH_TOKEN'] = self.oauth_token
-            
-            # Test CLI access
-            result = subprocess.run(
-                ['claude-code', '--version'],
-                capture_output=True,
-                text=True,
-                timeout=10
+            # Test API access with a simple request
+            self.client.messages.create(
+                model="claude-3-haiku-20240307",
+                max_tokens=10,
+                messages=[{"role": "user", "content": "test"}]
             )
-            
-            if result.returncode != 0:
-                print(f"Warning: Claude Code CLI not accessible: {result.stderr}", file=sys.stderr)
-        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
-            print(f"Warning: Cannot verify Claude Code CLI: {e}", file=sys.stderr)
+            print("Successfully connected to Anthropic API", file=sys.stderr)
+        except Exception as e:
+            print(f"Warning: Cannot connect to Anthropic API: {e}", file=sys.stderr)
     
     def decompose(self, context: str, max_tasks: int = 10) -> Dict[str, Any]:
         """
@@ -76,8 +74,8 @@ class TaskDecomposer:
         prompt = self._build_decomposition_prompt(context, project_context, max_tasks)
         
         try:
-            # Use Claude Code CLI to analyze and decompose
-            response = self._call_claude_cli(prompt)
+            # Use Anthropic API to analyze and decompose
+            response = self._call_anthropic_api(prompt)
             
             # Parse and validate the response
             tasks_data = self._parse_response(response)
@@ -97,32 +95,26 @@ class TaskDecomposer:
                 "context_summary": context[:200]
             }
     
-    def _call_claude_cli(self, prompt: str) -> str:
-        """Call Claude Code CLI with the given prompt"""
+    def _call_anthropic_api(self, prompt: str) -> str:
+        """Call Anthropic API with the given prompt"""
         try:
-            # Call Claude Code CLI
-            result = subprocess.run([
-                'claude-code',
-                '--query', prompt,
-                '--output-mode', 'text',
-                '--turns', '1',
-                '--yes'
-            ], 
-            capture_output=True, 
-            text=True, 
-            timeout=300,
-            env=dict(os.environ, CLAUDE_CODE_OAUTH_TOKEN=self.oauth_token)
+            # Call Anthropic API
+            response = self.client.messages.create(
+                model="claude-3-sonnet-20240229",
+                max_tokens=4000,
+                temperature=0.1,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ]
             )
             
-            if result.returncode != 0:
-                raise RuntimeError(f"Claude CLI failed: {result.stderr}")
-            
-            return result.stdout.strip()
+            return response.content[0].text
                 
-        except subprocess.TimeoutExpired:
-            raise RuntimeError("Claude CLI call timed out after 5 minutes")
-        except FileNotFoundError:
-            raise RuntimeError("Claude Code CLI not found. Please install it first.")
+        except Exception as e:
+            raise RuntimeError(f"Anthropic API call failed: {e}")
     
     def _build_decomposition_prompt(self, context: str, project_context: str, max_tasks: int) -> str:
         """Build the prompt for task decomposition"""
@@ -306,7 +298,7 @@ def main():
     )
     parser.add_argument(
         '--oauth-token',
-        help='Claude Code OAuth token (defaults to CLAUDE_CODE_OAUTH_TOKEN env var)'
+        help='Claude/Anthropic API token (defaults to CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY env var)'
     )
     
     args = parser.parse_args()
