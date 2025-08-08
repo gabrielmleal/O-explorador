@@ -17,6 +17,7 @@ on:
 
 env:
   CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
@@ -39,15 +40,22 @@ jobs:
         with:
           python-version: '3.11'
       
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-      
       - name: Install dependencies
         run: |
-          pip install PyGithub pyyaml
-          npm install -g claude-code
+          pip install --upgrade pip
+          echo "Installing dependencies from scripts/requirements.txt..."
+          pip install -r scripts/requirements.txt || {
+            echo "❌ Requirements file installation failed, installing packages individually..."
+            pip install "anthropic>=0.35.0"
+            pip install "PyGithub>=1.58.0"
+            pip install "pyyaml>=6.0"
+            pip install "requests>=2.28.0"
+          }
+          echo "Verifying installation..."
+          pip list | grep -E "(anthropic|PyGithub|pyyaml|requests)" || echo "⚠️ Some packages may not be visible in pip list"
+          echo "Testing critical imports..."
+          python -c "import anthropic; print('✅ anthropic SDK successfully imported')"
+          python -c "import github; print('✅ PyGithub successfully imported')"
       
       - name: Extract context
         id: extract_context
@@ -67,12 +75,32 @@ jobs:
       - name: Decompose context into tasks
         id: decompose
         run: |
+          echo "=== Environment Debug ==="
+          echo "Current directory: $(pwd)"
+          echo "Python version: $(python --version)"
+          echo "Python path: $(which python)"
+          echo "PYTHONPATH: ${PYTHONPATH:-not set}"
+          
+          echo "=== Re-testing anthropic import ==="
+          python -c "import anthropic; print('✅ anthropic SDK available')" || {
+            echo "❌ anthropic import failed, attempting reinstall..."
+            pip install anthropic --force-reinstall --no-cache-dir
+            python -c "import anthropic; print('✅ anthropic SDK now available')" || {
+              echo "❌ Critical error: Cannot import anthropic after reinstall"
+              echo "Available packages:"
+              pip list
+              exit 1
+            }
+          }
+          
+          echo "=== Running task decomposer ==="
           python scripts/task-decomposer.py \
             --context "${{ env.CONTEXT }}" \
             --max-tasks "${{ env.MAX_TASKS }}" \
             --output tasks.json
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         continue-on-error: true
       
       - name: Create GitHub issues for tasks
