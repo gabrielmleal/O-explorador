@@ -49,7 +49,8 @@ class IssueCreator:
         tasks_file: str,
         parent_issue: Optional[int] = None,
         auto_implement: bool = True,
-        dry_run: bool = False
+        dry_run: bool = False,
+        output_dir: Optional[str] = None
     ) -> List[int]:
         """
         Create GitHub issues from a tasks JSON file
@@ -59,6 +60,7 @@ class IssueCreator:
             parent_issue: Optional parent issue number to reference
             auto_implement: Whether to add the auto-implement label
             dry_run: If True, don't actually create issues
+            output_dir: Directory to write created_issues.json (defaults to current directory)
         
         Returns:
             List of created issue numbers
@@ -105,7 +107,12 @@ class IssueCreator:
                     )
         
         # Always save the mapping for reference, even if empty
-        with open("created_issues.json", "w") as f:
+        output_file = "created_issues.json"
+        if output_dir:
+            from pathlib import Path
+            output_file = str(Path(output_dir) / "created_issues.json")
+        
+        with open(output_file, "w") as f:
             json.dump(created_issues, f, indent=2)
         
         if created_issues:
@@ -386,6 +393,10 @@ def main():
         '--github-token',
         help='GitHub personal access token (defaults to GITHUB_TOKEN env var)'
     )
+    parser.add_argument(
+        '--output-dir',
+        help='Directory to write created_issues.json (defaults to current directory)'
+    )
     
     args = parser.parse_args()
     
@@ -405,7 +416,8 @@ def main():
             tasks_file=args.tasks_file,
             parent_issue=args.parent_issue,
             auto_implement=args.auto_implement,
-            dry_run=args.dry_run
+            dry_run=args.dry_run,
+            output_dir=args.output_dir
         )
         
         if not args.dry_run:
