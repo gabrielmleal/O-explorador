@@ -101,7 +101,22 @@ ${'---'}
         owner: context.repo.owner,
         repo: context.repo.repo,
         issue_number: parseInt(parentIssue),
-        body: `🤖 TASK-${i + 1}: ${JSON.stringify(taskData, null, 2)}`
+        body: `🤖 TASK-${i + 1}: ${JSON.stringify(taskData, null, 2)}
+
+@claude Please implement this task.`
+      });
+      
+      // Trigger task implementation workflow via repository dispatch
+      await github.rest.repos.createDispatchEvent({
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+        event_type: 'implement-task',
+        client_payload: {
+          task_id: i + 1,
+          task_data: taskData,
+          comment_id: comment.data.id,
+          issue_number: parseInt(parentIssue)
+        }
       });
       
       createdTasks.push(taskData.id);
