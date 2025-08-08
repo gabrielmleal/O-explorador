@@ -1,0 +1,337 @@
+# Claude Workflow Configuration
+# This file contains configuration settings for the automated workflow system
+
+# Task Decomposition Settings
+task_decomposition:
+  # Maximum number of tasks to generate from a single context
+  max_tasks_default: 10
+  max_tasks_limit: 25
+  
+  # Complexity thresholds (in estimated hours)
+  complexity_thresholds:
+    low: 2      # <= 2 hours
+    medium: 8   # 2-8 hours
+    high: 24    # > 8 hours
+  
+  # Task size preferences
+  preferred_task_size: "medium"  # small, medium, large
+  
+  # Allow task parallelization
+  enable_parallel_tasks: true
+  max_parallel_tasks: 5
+
+# Issue Creation Settings
+issue_creation:
+  # Labels to automatically apply
+  default_labels:
+    - "auto-generated"
+    - "claude-task"
+  
+  # Label mapping for task properties
+  complexity_labels:
+    low: "complexity:low"
+    medium: "complexity:medium"
+    high: "complexity:high"
+  
+  type_labels:
+    feature: "enhancement"
+    bugfix: "bug"
+    refactor: "refactor"
+    test: "testing"
+    docs: "documentation"
+    chore: "chore"
+  
+  priority_labels:
+    1: "priority:critical"
+    2: "priority:high"
+    3: "priority:medium"
+    4: "priority:low"
+  
+  # Auto-implementation settings
+  auto_implement:
+    enabled: true
+    label: "auto-implement"
+    delay_seconds: 5  # Delay before triggering implementation
+  
+  # Issue template settings
+  include_metadata: true
+  include_dependencies: true
+  include_success_criteria: true
+  include_risks: true
+
+# PR Creation Settings
+pr_creation:
+  # Branch naming
+  branch_prefix: "claude"
+  branch_format: "claude/issue-{issue_number}-{task_slug}"
+  max_branch_length: 63
+  
+  # PR settings
+  create_draft: false
+  auto_merge: false
+  delete_branch_on_merge: true
+  
+  # PR labels
+  default_labels:
+    - "claude-generated"
+    - "needs-review"
+  
+  # Review settings
+  request_reviews: true
+  reviewers: []  # Add GitHub usernames
+  team_reviewers: []  # Add team slugs
+  
+  # PR template
+  include_implementation_log: true
+  include_test_checklist: true
+  include_issue_link: true
+
+# Claude Code Settings
+claude:
+  # Model settings
+  model: "claude-3-opus-20240229"  # or claude-3-sonnet, claude-3-haiku
+  max_tokens: 4096
+  temperature: 0.7
+  
+  # Query settings
+  max_turns: 3
+  output_mode: "text"  # text, json, stream
+  
+  # System prompts
+  use_custom_system_prompt: true
+  system_prompt_file: "CLAUDE.md"
+  
+  # Extended thinking
+  enable_extended_thinking: true
+  thinking_keywords:
+    - "think"
+    - "analyze"
+    - "plan"
+  
+  # Cost optimization
+  use_caching: true
+  cache_ttl_minutes: 15
+  
+  # Error handling
+  retry_on_error: true
+  max_retries: 3
+  retry_delay_seconds: 5
+
+# GitHub Integration
+github:
+  # API settings
+  api_version: "v3"
+  per_page: 100
+  
+  # Rate limiting
+  respect_rate_limits: true
+  rate_limit_delay_ms: 1000
+  
+  # Issue settings
+  close_on_merge: true
+  lock_closed_issues: false
+  
+  # PR settings
+  squash_merge: true
+  merge_commit_title: "conventional"  # conventional, pr_title, custom
+  
+  # Notifications
+  notify_on_success: true
+  notify_on_failure: true
+
+# Workflow Triggers
+triggers:
+  # Context input trigger
+  context_input:
+    enabled: true
+    label: "context-input"
+    process_edits: true
+  
+  # Auto-implement trigger
+  auto_implement:
+    enabled: true
+    label: "auto-implement"
+    ignore_labels: ["in-progress", "blocked"]
+  
+  # PR assistant trigger
+  pr_assistant:
+    enabled: true
+    mention: "@claude"
+    respond_to_reviews: true
+    respond_to_comments: true
+
+# Monitoring and Logging
+monitoring:
+  # Logging level
+  log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  
+  # Metrics collection
+  collect_metrics: true
+  metrics_endpoint: ""  # Optional metrics endpoint
+  
+  # Error reporting
+  report_errors: true
+  error_webhook: ""  # Optional webhook for errors
+  
+  # Performance tracking
+  track_execution_time: true
+  track_api_usage: true
+  track_costs: true
+
+# Security Settings
+security:
+  # Token validation
+  validate_tokens: true
+  token_min_length: 40
+  
+  # Input validation
+  validate_inputs: true
+  max_input_length: 100000
+  sanitize_html: true
+  
+  # Branch protection
+  protect_main_branch: true
+  require_pr_reviews: true
+  dismiss_stale_reviews: true
+  
+  # Audit logging
+  enable_audit_log: true
+  audit_log_retention_days: 90
+
+# Performance Settings
+performance:
+  # Parallelization
+  max_parallel_workflows: 5
+  max_parallel_api_calls: 3
+  
+  # Timeouts (in seconds)
+  workflow_timeout: 3600  # 1 hour
+  api_timeout: 300  # 5 minutes
+  claude_timeout: 600  # 10 minutes
+  
+  # Resource limits
+  max_memory_mb: 2048
+  max_cpu_cores: 2
+  
+  # Caching
+  enable_caching: true
+  cache_provider: "memory"  # memory, redis, disk
+  cache_ttl_minutes: 60
+
+# Feature Flags
+features:
+  # Experimental features
+  use_claude_subagents: false
+  enable_task_clustering: false
+  smart_dependency_detection: false
+  
+  # Beta features
+  auto_test_generation: false
+  documentation_generation: false
+  code_review_automation: false
+  
+  # Advanced features
+  multi_repo_support: false
+  cross_reference_issues: false
+  milestone_tracking: false
+
+# Notification Settings
+notifications:
+  # Slack integration
+  slack:
+    enabled: false
+    webhook_url: ""
+    channel: "#dev-automation"
+    notify_on:
+      - "task_decomposition_complete"
+      - "pr_created"
+      - "pr_merged"
+      - "error"
+  
+  # Email notifications
+  email:
+    enabled: false
+    smtp_server: ""
+    from_address: ""
+    to_addresses: []
+    notify_on:
+      - "workflow_complete"
+      - "workflow_failed"
+  
+  # GitHub notifications
+  github:
+    enabled: true
+    notify_assignees: true
+    notify_mentions: true
+
+# Cost Management
+cost_management:
+  # Budget limits
+  daily_token_limit: 1000000
+  monthly_token_limit: 30000000
+  
+  # Cost alerts
+  alert_at_percentage: 80
+  stop_at_percentage: 100
+  
+  # Optimization
+  prefer_cheaper_models: false
+  adaptive_model_selection: false
+  
+  # Tracking
+  track_per_user: false
+  track_per_project: true
+  generate_cost_reports: true
+
+# Backup and Recovery
+backup:
+  # Artifact backup
+  backup_artifacts: true
+  artifact_retention_days: 30
+  
+  # State backup
+  backup_workflow_state: true
+  state_retention_days: 7
+  
+  # Recovery
+  enable_auto_recovery: true
+  recovery_retry_limit: 3
+
+# Custom Extensions
+extensions:
+  # Custom scripts
+  pre_decomposition_script: ""
+  post_decomposition_script: ""
+  pre_pr_script: ""
+  post_pr_script: ""
+  
+  # Webhooks
+  webhooks:
+    task_created: ""
+    pr_created: ""
+    pr_merged: ""
+    workflow_complete: ""
+  
+  # Plugins
+  plugins_enabled: false
+  plugins_directory: "plugins/"
+
+# Environment-specific Settings
+environments:
+  development:
+    max_tasks_default: 5
+    auto_implement: false
+    create_draft_prs: true
+  
+  staging:
+    max_tasks_default: 10
+    auto_implement: true
+    create_draft_prs: true
+  
+  production:
+    max_tasks_default: 15
+    auto_implement: true
+    create_draft_prs: false
+
+# Default environment
+default_environment: "production"
