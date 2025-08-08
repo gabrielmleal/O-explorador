@@ -7,29 +7,31 @@ This is an automated workflow system that uses Claude Code to decompose requirem
 
 ### Core Components
 1. **GitHub Workflows** (`.github/workflows/`)
-   - `context-to-tasks.yml`: Main orchestrator for task decomposition
-   - `issue-to-pr.yml`: Automatic PR creation from issues
+   - `context-to-tasks.yml`: Main orchestrator using Claude Code action for task decomposition
+   - `issue-to-pr.yml`: Automatic PR creation from issues using Claude Code CLI
    - `claude-pr.yml`: Interactive PR assistant
 
-2. **Python Scripts** (`scripts/`)
-   - `task-decomposer.py`: Uses Claude SDK to break down requirements
-   - `issue-creator.py`: Creates GitHub issues from task list
-
-3. **Configuration** (`config/`)
+2. **Configuration** (`config/`)
    - `workflow-config.yml`: Workflow settings and parameters
+
+3. **Integration Approach**
+   - Uses `anthropics/claude-code-action@beta` for task decomposition
+   - Uses `claude-code` CLI for issue implementation
+   - Inline JavaScript in GitHub Actions for issue creation and workflow orchestration
 
 ## Development Guidelines
 
 ### Code Style
-- **Python**: Follow PEP 8 guidelines
 - **YAML**: Use 2-space indentation
+- **JavaScript**: Use modern ES6+ syntax in GitHub Actions scripts
 - **Markdown**: Use clear headers and formatting
-- **Comments**: Add docstrings to all functions and classes
+- **Comments**: Add clear comments to complex workflow logic
 
 ### Error Handling
 - Always include try-catch blocks for external API calls
-- Provide meaningful error messages
-- Log errors to stderr for debugging
+- Provide meaningful error messages with workflow feedback
+- Use `core.setFailed()` to properly fail workflows
+- Comment on issues when failures occur
 - Implement graceful fallbacks when possible
 
 ### GitHub Integration
@@ -69,23 +71,23 @@ This is an automated workflow system that uses Claude Code to decompose requirem
 
 ## Testing Requirements
 
-### Unit Tests
-- Test all core functions in Python scripts
-- Mock external API calls
-- Validate input/output formats
-- Test error handling paths
+### Workflow Testing
+- Test workflow triggers with various inputs
+- Validate JSON structure validation logic
+- Test error handling paths and user feedback
+- Verify Claude Code action file creation
 
 ### Integration Tests
-- Test workflow triggers
-- Validate end-to-end flow
-- Test with various input types
-- Verify GitHub integration
+- Test full context-to-tasks-to-PR flow
+- Validate end-to-end automation
+- Test with various context input types
+- Verify GitHub integration and permissions
 
 ### Manual Testing
 - Test with real GitHub repositories
-- Validate Claude responses
-- Check rate limiting behavior
-- Verify error recovery
+- Validate Claude Code responses and file generation
+- Check workflow failure scenarios
+- Verify parent issue linking and progress comments
 
 ## Security Considerations
 
@@ -187,23 +189,31 @@ on:
     types: [created]
 ```
 
-### Claude Prompting
-```python
-prompt = f"""
-Context: {project_context}
-Task: {specific_task}
-Requirements: {requirements}
-Output: JSON structure with specific fields
-"""
+### Claude Code Action Usage
+```yaml
+- name: Analyze context with Claude Code
+  uses: anthropics/claude-code-action@beta
+  with:
+    claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+    custom_instructions: |
+      CONTEXT TO ANALYZE: ${{ github.event.inputs.context }}
+      INSTRUCTIONS:
+      1. Read CLAUDE.md and understand the project structure
+      2. Write a JSON file called 'tasks.json' with structured output
 ```
 
 ### Error Recovery
-```python
-try:
-    result = api_call()
-except Exception as e:
-    log_error(e)
-    return fallback_result()
+```javascript
+try {
+  const tasksData = JSON.parse(fs.readFileSync('tasks.json', 'utf8'));
+  // Process tasks...
+} catch (error) {
+  console.log('❌ Failed to parse tasks.json:', error.message);
+  await github.rest.issues.createComment({
+    body: `❌ **Task decomposition failed** - ${error.message}`
+  });
+  core.setFailed('Invalid tasks.json file');
+}
 ```
 
 ## Version Control
