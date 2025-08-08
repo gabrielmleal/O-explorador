@@ -1,0 +1,21 @@
+{
+  "tasks": [
+    {
+      "title": "Create bear sprite image file",
+      "body": "Create a new bear sprite image file (`Urso.gif` or `UrsoPardo.gif`) following the existing wolf sprite patterns:\n\n**Requirements:**\n- 30x30 pixel sprite dimensions\n- Two rows: top row with idle/standing frame, bottom row with 4 walking animation frames\n- Pixel art style matching the existing wolf sprites\n- Brown/dark brown color scheme appropriate for a bear\n- Place in `src/Imagens/` directory\n\n**Reference:**\n- Study existing `LoboCinza.gif` and `LoboVermelho.gif` for sprite layout\n- Bear should look more robust/larger than wolves but fit same 30x30 dimensions\n- Look up pixel art bear references online for inspiration\n\n**Success Criteria:**\n- [ ] Sprite file created with correct dimensions\n- [ ] Contains idle frame (top row) and 4 walking frames (bottom row)\n- [ ] Matches visual style of existing enemies\n- [ ] Placed in correct directory"
+    },
+    {
+      "title": "Create Urso (Bear) enemy class",
+      "body": "Create a new `Urso.java` class in `src/ObjetosDoMapa/` following the wolf enemy implementation patterns:\n\n**Requirements:**\n- Extend the `Inimigo` base class\n- Higher health than wolves (suggested: 8-10 HP vs wolf's 3-6 HP)\n- Slower movement speed than wolves (suggested: 0.6 vs wolf's 0.8-1.3)\n- Same damage output as wolves (1 HP)\n- Load the bear sprite and set up animation frames\n- Follow same collision detection and AI movement patterns\n\n**Implementation Details:**\n- Use `LoboCinza.java` as template for structure\n- Set `vida = maxVida = 8` (or 10) for higher health\n- Set `velMovimento = velMaxMovimento = 0.6` for slower speed\n- Load sprite from `/Imagens/Urso.gif` (or whatever filename used)\n- Set up `spriteParado` and `spriteAndando` arrays\n- Use same explosion sprite for death animation\n\n**Success Criteria:**\n- [ ] Class extends Inimigo properly\n- [ ] Has higher health and slower speed than wolves\n- [ ] Sprite loading and animation setup works\n- [ ] Movement and collision detection functional"
+    },
+    {
+      "title": "Import Urso class in Estado_Level1",
+      "body": "Add the necessary import statement for the new Urso class in the Level 1 state manager:\n\n**Requirements:**\n- Add `import ObjetosDoMapa.Urso;` to the imports section\n- Place it alongside existing wolf imports (`LoboCinza`, `LoboVermelho`)\n\n**File to modify:**\n- `src/GerenciadorDeEstados/Estado_Level1.java`\n\n**Success Criteria:**\n- [ ] Import statement added correctly\n- [ ] No compilation errors"
+    },
+    {
+      "title": "Add bear instance to Level 1 near the ending portal", 
+      "body": "Add one bear enemy instance to the end of Level 1, positioned close to the ending portal:\n\n**Requirements:**\n- Add bear instance in the `inicializa()` method of `Estado_Level1.java`\n- Position it near the portal at (4875, 165) - suggest around x=4800-4850\n- Follow the same instantiation pattern as existing wolves\n- Add to the `inimigos` ArrayList\n\n**Implementation:**\n```java\n// Add near the end of enemy initialization\nInimigo urso = new Urso(mb);\nurso.mudarPosicaoPara(4820, 170); // Near portal but not blocking it\ninimigos.add(urso);\n```\n\n**Positioning considerations:**\n- Portal is at (4875, 165)\n- Place bear at ground level (y=170) \n- Give some space from portal (x=4820 suggested)\n- Should be challenging final enemy before level completion\n\n**Success Criteria:**\n- [ ] Bear instance created and positioned correctly\n- [ ] Added to enemies list\n- [ ] Positioned near but not blocking the portal\n- [ ] Game runs without errors"
+    }
+  ],
+  "parent_issue": 42
+}
