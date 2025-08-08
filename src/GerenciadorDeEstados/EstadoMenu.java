@@ -103,7 +103,7 @@ public class EstadoMenu extends Estado {//Estado de menu
             ge.mudarEstado(GerenciadorEstado.ESTADO_LEVEL_1);
         }
         else if(escolhaAtual==1){
-            
+            ge.mudarEstado(GerenciadorEstado.ESTADO_AJUDA);
         }
         else{
             System.exit(0);
