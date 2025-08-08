@@ -16,7 +16,7 @@ on:
     types: [opened, edited]
 
 jobs:
-  decompose-and-create-issues:
+  decompose-and-create-task-comments:
     runs-on: ubuntu-latest
     if: |
       github.event_name == 'workflow_dispatch' || 
@@ -51,19 +51,19 @@ jobs:
 
             Max tasks: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.max_tasks || '10' }}
 
-      - name: Create GitHub issues from tasks
+      - name: Create task comments from tasks
         uses: actions/github-script@v7
         env:
           PARENT_ISSUE_NUMBER: ${{ github.event.issue.number }}
         with:
           script: |
             const path = require('path');
-            const createIssues = require(path.join(process.cwd(), 'scripts', 'create-issues.js'));
+            const createTaskComments = require(path.join(process.cwd(), 'scripts', 'create-task-comments.js'));
             
             try {
-              await createIssues({ github, context, core });
+              await createTaskComments({ github, context, core });
             } catch (error) {
-              console.log('❌ Issue creation failed:', error.message);
+              console.log('❌ Task comment creation failed:', error.message);
               core.setFailed(error.message);
             }
 
@@ -73,4 +73,4 @@ jobs:
           name: task-decomposition
           path: |
             tasks.json
-            created_issues.json
+            created_tasks.json

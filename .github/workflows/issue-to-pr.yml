@@ -1,322 +1,82 @@
-name: Issue to PR Automation
+name: Task Comment to PR Automation
 
 on:
-  issues:
-    types: [opened, labeled]
-
-env:
-  CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+  issue_comment:
+    types: [created]
 
 jobs:
-  create-pr-from-issue:
+  implement-task:
     runs-on: ubuntu-latest
-    if: contains(github.event.issue.labels.*.name, 'auto-implement')
+    if: startsWith(github.event.comment.body, '🤖 TASK-')
     
     permissions:
       contents: write
       pull-requests: write
       issues: write
+      id-token: write
+      actions: read
     
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
         with:
-          node-version: '18'
-      
-      - name: Install Claude Code CLI
-        id: install-claude
-        run: |
-          npm install -g claude-code
-          
-          # Verify installation
-          if ! command -v claude-code &> /dev/null; then
-            echo "❌ Claude Code CLI installation failed"
-            exit 1
-          fi
-          
-          # Check version
-          claude-code --version
-          echo "✅ Claude Code CLI installed successfully"
-      
-      - name: Generate branch name
-        id: branch
-        run: |
-          # Create branch name from issue title
-          BRANCH_NAME="claude/issue-${{ github.event.issue.number }}-$(echo "${{ github.event.issue.title }}" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd '[:alnum:]-' | cut -c1-50)"
-          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
-          
-          # Create and checkout new branch
-          git config user.name "Claude Code Bot"
-          git config user.email "claude-bot@example.com"
-          git checkout -b "$BRANCH_NAME"
-      
-      - name: Implement issue with Claude Code
-        id: implement
-        continue-on-error: true
-        run: |
-          # Read any CLAUDE.md for context
-          CONTEXT=""
-          if [ -f "CLAUDE.md" ]; then
-            CONTEXT="$(cat CLAUDE.md)"
-          fi
-          
-          # Construct the prompt
-          PROMPT="You are implementing a GitHub issue. Here's the task:
-          
-          Issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
-          
-          Description:
-          ${{ github.event.issue.body }}
-          
-          Project Context:
-          $CONTEXT
-          
-          Please implement this task completely, creating or modifying all necessary files.
-          Follow best practices and ensure the code is production-ready.
-          If tests are needed, create them.
-          Make sure to handle edge cases and add appropriate error handling."
-          
-          # Execute Claude Code with OAuth token and specify Claude Sonnet 4
-          claude-code --query "$PROMPT" \
-            --output-mode text \
-            --turns 3 \
-            --model claude-sonnet-4-20250514 \
-            --yes \
-            > implementation.log 2>&1
-          
-          # Check if any files were modified
-          if [ -n "$(git status --porcelain)" ]; then
-            echo "changes_made=true" >> $GITHUB_OUTPUT
-          else
-            echo "changes_made=false" >> $GITHUB_OUTPUT
-          fi
-        env:
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-      
-      - name: Commit changes
-        if: steps.implement.outputs.changes_made == 'true'
-        run: |
-          git add -A
-          git commit -m "Implement #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
-          
-          This PR implements the requirements described in issue #${{ github.event.issue.number }}.
-          
-          Generated with Claude Code
-          Co-authored-by: Claude <claude@anthropic.com>"
-      
-      - name: Push branch
-        if: steps.implement.outputs.changes_made == 'true'
-        run: |
-          git push origin ${{ steps.branch.outputs.branch_name }}
-      
-      - name: Create Pull Request
-        if: steps.implement.outputs.changes_made == 'true'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const implementationLog = fs.readFileSync('implementation.log', 'utf8');
-            
-            // Extract summary from implementation log (first few lines)
-            const logLines = implementationLog.split('\n');
-            const summary = logLines.slice(0, 10).join('\n');
-            
-            const { data: pr } = await github.rest.pulls.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `[Claude] ${context.payload.issue.title}`,
-              head: '${{ steps.branch.outputs.branch_name }}',
-              base: 'main',
-              body: `## Summary
-            
-            This PR implements the requirements from #${context.payload.issue.number}.
-            
-            ### Implementation Details
-            
-            ${summary}...
-            
-            ### Related Issue
-            
-            Closes #${context.payload.issue.number}
-            
-            ### Testing
-            
-            - [ ] Code has been tested locally
-            - [ ] All tests pass
-            - [ ] No linting errors
-            
-            ### Claude Code Implementation Log
-            
-            <details>
-            <summary>View full implementation details</summary>
-            
-            \`\`\`
-            ${implementationLog}
-            \`\`\`
-            
-            </details>
-            
-            ---
-            *This PR was automatically generated by Claude Code in response to issue #${context.payload.issue.number}*
-            
-            cc @claude for any adjustments needed
-            
-            @claude Please review this implementation and make any necessary improvements.`
-            });
-            
-            // Link PR to issue
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.payload.issue.number,
-              body: `🤖 Claude has created PR #${pr.number} to implement this issue.`
-            });
-            
-            // Add labels to PR
-            await github.rest.issues.addLabels({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: pr.number,
-              labels: ['claude-generated', 'needs-review']
-            });
-            
-            // Update parent issue if this is a decomposed task
-            const parentIssueMatch = context.payload.issue.body.match(/Part of #(\d+)/);
-            if (parentIssueMatch) {
-              const parentIssueNumber = parseInt(parentIssueMatch[1]);
-              
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: parentIssueNumber,
-                body: `✅ **Task Progress Update**
+          fetch-depth: 1
 
-                **Issue #${context.payload.issue.number}** - "${context.payload.issue.title}" has been implemented.
-                
-                📋 **PR Created**: #${pr.number}
-                🔄 **Status**: Ready for review
-                
-                This task is now complete and awaiting code review.`
-              });
-              
-              console.log(\`Updated parent issue #\${parentIssueNumber} with progress\`);
-            }
-      
-      - name: Handle implementation failure
-        if: steps.implement.outcome == 'failure'
+      - name: Parse task data and update status
+        id: parse-task
         uses: actions/github-script@v7
         with:
           script: |
-            const fs = require('fs');
-            let logContent = '';
+            const path = require('path');
+            const processTaskComment = require(path.join(process.cwd(), 'scripts', 'process-task-comment.js'));
             
             try {
-              if (fs.existsSync('implementation.log')) {
-                logContent = fs.readFileSync('implementation.log', 'utf8');
-              }
+              const result = await processTaskComment({ github, context, core });
+              core.setOutput('task_data', JSON.stringify(result.taskData));
+              core.setOutput('task_id', result.taskId);
             } catch (error) {
-              logContent = 'Unable to read implementation log';
-            }
-            
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.payload.issue.number,
-              body: `❌ **Implementation failed** - Claude Code encountered an error while implementing this issue.
-
-              <details>
-              <summary>View error details</summary>
-              
-              \`\`\`
-              ${logContent.slice(-2000)} // Last 2000 chars
-              \`\`\`
-              
-              </details>
-              
-              Please review the error details and the issue requirements. You may need to:
-              - Clarify the requirements
-              - Check for syntax errors in the issue description
-              - Verify that necessary dependencies are available`
-            });
-            
-            // Update parent issue if this is a decomposed task
-            const parentIssueMatch = context.payload.issue.body.match(/Part of #(\d+)/);
-            if (parentIssueMatch) {
-              const parentIssueNumber = parseInt(parentIssueMatch[1]);
-              
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: parentIssueNumber,
-                body: `❌ **Task Progress Update**
-
-                **Issue #${context.payload.issue.number}** - "${context.payload.issue.title}" implementation failed.
-                
-                🚫 **Status**: Implementation error
-                📝 **Action needed**: Review and clarify requirements
-                
-                Please check the task issue for detailed error information.`
-              });
+              console.log('❌ Task parsing failed:', error.message);
+              core.setFailed(error.message);
             }
 
-      - name: Handle no changes case
-        if: steps.implement.outputs.changes_made == 'false' && steps.implement.outcome == 'success'
+      - name: Implement task with Claude Code
+        uses: anthropics/claude-code-action@beta
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          custom_instructions: |
+            Read CLAUDE.md and implement this task:
+
+            Task: ${{ fromJson(steps.parse-task.outputs.task_data).title }}
+
+            Description:
+            ${{ fromJson(steps.parse-task.outputs.task_data).body }}
+
+            Instructions:
+            1. Implement the requirements completely
+            2. Follow best practices and project conventions  
+            3. Create/modify all necessary files
+            4. Ensure code is production-ready
+            5. Add appropriate error handling
+
+      - name: Create PR and update task status
         uses: actions/github-script@v7
         with:
           script: |
-            const fs = require('fs');
-            let logContent = '';
+            const path = require('path');
+            const createPrFromTask = require(path.join(process.cwd(), 'scripts', 'create-pr-from-task.js'));
+            
+            // Get task data from previous step
+            const taskData = JSON.parse('${{ steps.parse-task.outputs.task_data }}');
+            const taskId = '${{ steps.parse-task.outputs.task_id }}';
             
             try {
-              if (fs.existsSync('implementation.log')) {
-                logContent = fs.readFileSync('implementation.log', 'utf8');
+              const prNumber = await createPrFromTask({ github, context, taskData, taskId });
+              if (prNumber) {
+                console.log(`✅ PR #${prNumber} created successfully`);
+              } else {
+                console.log('ℹ️ No PR created - no changes needed');
               }
             } catch (error) {
-              logContent = 'Unable to read implementation log';
-            }
-            
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.payload.issue.number,
-              body: `⚠️ **No changes made** - Claude Code completed successfully but determined no changes were needed.
-
-              <details>
-              <summary>View Claude's analysis</summary>
-              
-              \`\`\`
-              ${logContent.slice(-2000)} // Last 2000 chars
-              \`\`\`
-              
-              </details>
-              
-              This could mean:
-              - The requirements are already implemented
-              - The issue description needs clarification
-              - The task is not implementable as described
-              
-              Please review the analysis above and update the issue if needed.`
-            });
-            
-            // Update parent issue if this is a decomposed task
-            const parentIssueMatch = context.payload.issue.body.match(/Part of #(\d+)/);
-            if (parentIssueMatch) {
-              const parentIssueNumber = parseInt(parentIssueMatch[1]);
-              
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: parentIssueNumber,
-                body: `⚠️ **Task Progress Update**
-
-                **Issue #${context.payload.issue.number}** - "${context.payload.issue.title}" needs review.
-                
-                🔍 **Status**: No changes made
-                📝 **Action needed**: Review task requirements
-                
-                Claude determined no changes were needed. Please review the task details and update if necessary.`
-              });
+              console.log('❌ PR creation failed:', error.message);
+              core.setFailed(error.message);
             }
