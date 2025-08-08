@@ -201,7 +201,11 @@ public class Estado_Level1 extends Estado {//classe do estado de level 1
         if(jogador.terminou()) return;
         if(k==KeyEvent.VK_RIGHT) jogador.Direita(true);
         if(k==KeyEvent.VK_LEFT) jogador.Esquerda(true);
-        if(k==KeyEvent.VK_UP) jogador.Pulando(true);
+        if(k==KeyEvent.VK_UP) {
+            jogador.Pulando(true);
+            // tenta pulo duplo se já estiver no ar
+            jogador.tentarPuloDuplo();
+        }
         if(k==KeyEvent.VK_DOWN) jogador.Baixo(true);
         if(k==KeyEvent.VK_Z) jogador.ataca();
         if(k==KeyEvent.VK_X) jogador.atira();
