@@ -14,6 +14,7 @@ import ObjetosDoMapa.Jogador;
 import ObjetosDoMapa.LoboCinza;
 import ObjetosDoMapa.LoboVermelho;
 import ObjetosDoMapa.Portal;
+import ObjetosDoMapa.Urso;
 import Principal.JogoPanel;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
