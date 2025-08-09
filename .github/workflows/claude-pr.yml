@@ -6,8 +6,6 @@ on:
   pull_request_review_comment:
     types: [created]
 
-env:
-  CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
 jobs:
   claude-pr-response:
@@ -51,15 +49,6 @@ jobs:
           ref: ${{ steps.pr_details.outputs.head_ref }}
           fetch-depth: 0
       
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-      
-      - name: Install Claude Code CLI
-        run: |
-          npm install -g claude-code
-      
       - name: Extract Claude command
         id: extract_command
         run: |
@@ -78,97 +67,75 @@ jobs:
       
       - name: Execute Claude command
         id: claude_response
-        continue-on-error: true
+        uses: anthropics/claude-code-action@beta
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          custom_instructions: |
+            @claude You are helping with a pull request. Here's the context:
+            
+            PR #${{ steps.pr_details.outputs.pr_number }}
+            
+            Read CLAUDE.md for project context and guidelines.
+            
+            User request from PR comment: ${{ steps.extract_command.outputs.command }}
+            
+            INSTRUCTIONS:
+            1. Read CLAUDE.md for project context
+            2. Examine the current PR changes to understand what's being worked on
+            3. Address the user's request from the PR comment
+            4. If code changes are needed, make them directly
+            5. Follow project conventions and best practices
+            6. Be helpful and thorough but concise
+            
+            The user mentioned you in a PR comment with this request: "${{ steps.extract_command.outputs.command }}"
+            
+            Please help with their request. If you need to make changes to code, do so directly.
+      
+      - name: Check for changes and commit
+        id: check_changes
         run: |
-          # Read any CLAUDE.md for context
-          CONTEXT=""
-          if [ -f "CLAUDE.md" ]; then
-            CONTEXT="$(cat CLAUDE.md)"
-          fi
-          
-          # Read PR diff for context
-          PR_DIFF="$(cat pr_diff.txt | head -5000)"  # Limit diff size
-          CHANGED_FILES="$(cat changed_files.txt)"
-          
-          # Construct the prompt
-          PROMPT="You are helping with a pull request. Here's the context:
-          
-          PR #${{ steps.pr_details.outputs.pr_number }}
-          
-          Changed files:
-          $CHANGED_FILES
-          
-          Recent changes diff:
-          \`\`\`diff
-          $PR_DIFF
-          \`\`\`
-          
-          Project Context:
-          $CONTEXT
-          
-          User request: ${{ steps.extract_command.outputs.command }}
-          
-          Please help with the requested changes or answer the question.
-          If code changes are needed, make them directly.
-          Be concise but thorough."
-          
-          # Execute Claude Code with OAuth token and specify Claude Sonnet 4
-          claude-code --query "$PROMPT" \
-            --output-mode text \
-            --turns 2 \
-            --model claude-sonnet-4-20250514 \
-            --yes \
-            > claude_response.log 2>&1
-          
-          # Check if any files were modified
+          # Check if any files were modified by Claude Code Action
           if [ -n "$(git status --porcelain)" ]; then
             echo "changes_made=true" >> $GITHUB_OUTPUT
+            
+            # Configure git and commit changes
+            git config user.name "Claude Code Bot"
+            git config user.email "claude-bot@example.com"
+            
+            git add -A
+            git commit -m "Apply Claude's suggestions from PR comment
+
+            Responding to: ${{ steps.extract_command.outputs.command }}
+
+            🤖 Generated with Claude Code Action
+
+            Co-authored-by: Claude <noreply@anthropic.com>"
+            
+            git push origin ${{ steps.pr_details.outputs.head_ref }}
           else
             echo "changes_made=false" >> $GITHUB_OUTPUT
           fi
-        env:
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-      
-      - name: Commit and push changes
-        if: steps.claude_response.outputs.changes_made == 'true'
-        run: |
-          git config user.name "Claude Code Bot"
-          git config user.email "claude-bot@example.com"
-          
-          git add -A
-          git commit -m "Apply Claude's suggestions from PR comment
-          
-          Responding to: ${{ steps.extract_command.outputs.command }}
-          
-          Co-authored-by: Claude <claude@anthropic.com>"
-          
-          git push origin ${{ steps.pr_details.outputs.head_ref }}
       
       - name: Post response comment
         uses: actions/github-script@v7
         with:
           script: |
-            const fs = require('fs');
-            const response = fs.readFileSync('claude_response.log', 'utf8');
-            const changesMade = '${{ steps.claude_response.outputs.changes_made }}' === 'true';
+            const changesMade = '${{ steps.check_changes.outputs.changes_made }}' === 'true';
             
             let comment = '## 🤖 Claude Response\n\n';
             
             if (changesMade) {
               comment += '✅ **Changes have been applied to this PR**\n\n';
+              comment += 'Claude Code has analyzed your request and made the necessary code changes. ';
+              comment += 'The changes have been committed to this PR branch.\n\n';
+            } else {
+              comment += 'Claude Code has analyzed your request. ';
+              comment += 'No code changes were needed or made based on your request.\n\n';
             }
             
-            // Format the response (limit length for comment)
-            const maxLength = 50000;
-            let formattedResponse = response;
-            if (response.length > maxLength) {
-              formattedResponse = response.substring(0, maxLength) + '\n\n... (response truncated)';
-            }
-            
-            comment += formattedResponse;
-            
-            comment += '\n\n---\n';
-            comment += '*Powered by Claude Code*';
+            comment += `**Your request**: ${process.env.CLAUDE_COMMAND}\n\n`;
+            comment += '---\n';
+            comment += '*🤖 Generated with [Claude Code](https://claude.ai/code)*';
             
             await github.rest.issues.createComment({
               owner: context.repo.owner,
@@ -176,6 +143,8 @@ jobs:
               issue_number: ${{ steps.pr_details.outputs.pr_number }},
               body: comment
             });
+        env:
+          CLAUDE_COMMAND: ${{ steps.extract_command.outputs.command }}
       
       - name: Add reaction to original comment
         uses: actions/github-script@v7
