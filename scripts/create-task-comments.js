@@ -107,17 +107,39 @@ ${'---'}
       });
       
       // Trigger task implementation workflow via repository dispatch
-      await github.rest.repos.createDispatchEvent({
-        owner: context.repo.owner,
-        repo: context.repo.repo,
-        event_type: 'implement-task',
-        client_payload: {
-          task_id: i + 1,
-          task_data: taskData,
-          comment_id: comment.data.id,
-          issue_number: parseInt(parentIssue)
+      try {
+        // Use PAT token for workflow triggering if available
+        const workflowToken = process.env.WORKFLOW_TRIGGER_TOKEN;
+        
+        if (workflowToken) {
+          // Create separate GitHub client with PAT for workflow triggering
+          const { Octokit } = require('@octokit/rest');
+          const workflowGithub = new Octokit({
+            auth: workflowToken,
+            baseUrl: 'https://api.github.com'
+          });
+          
+          await workflowGithub.rest.repos.createDispatchEvent({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            event_type: 'implement-task',
+            client_payload: {
+              task_id: i + 1,
+              task_data: taskData,
+              comment_id: comment.data.id,
+              issue_number: parseInt(parentIssue)
+            }
+          });
+          
+          console.log(`✅ Workflow dispatch triggered for task ${i + 1}`);
+        } else {
+          console.log(`⚠️ WORKFLOW_TRIGGER_TOKEN not found - workflow dispatch skipped for task ${i + 1}`);
+          console.log('Please configure WORKFLOW_TRIGGER_TOKEN secret to enable automatic PR creation');
         }
-      });
+      } catch (dispatchError) {
+        console.log(`⚠️ Failed to trigger workflow for task ${i + 1}: ${dispatchError.message}`);
+        console.log('Task comment created but automatic PR generation may not work');
+      }
       
       createdTasks.push(taskData.id);
       console.log(`✅ Created task comment ${i + 1}: ${task.title}`);
