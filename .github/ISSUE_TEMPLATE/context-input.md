@@ -1,9 +1,22 @@
 ---
-name: Context Input for Task Decomposition
-about: Submit project requirements or context for automatic task decomposition and PR generation
-title: '[CONTEXT] '
-labels: context-input
+name: Legacy Context Input (Deprecated)
+about: "[DEPRECATED] Use 'Sequential Context for Task Implementation' instead"
+title: '[LEGACY-CONTEXT] '
+labels: context-input, deprecated
 assignees: ''
+---
+
+## ⚠️ DEPRECATED TEMPLATE
+
+**This template is deprecated.** Please use the **"Sequential Context for Task Implementation"** template instead for better sequential task execution.
+
+### Migration Notes:
+- Old parallel execution has been replaced with sequential execution
+- Use `sequential-context` label instead of `context-input`
+- Sequential execution provides better task integration and stacked PRs
+
+[Click here to create a sequential context issue instead](../../../issues/new?template=sequential-context.md)
+
 ---
 
 ## 📋 Project Context

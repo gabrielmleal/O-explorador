@@ -104,7 +104,7 @@ pr_creation:
   auto_merge: false
   delete_branch_on_merge: true
   
-  # PR labels (for non-sequential PRs)
+  # Legacy PR settings (for backwards compatibility)
   default_labels:
     - "claude-generated"
     - "needs-review"
@@ -174,11 +174,13 @@ github:
 
 # Workflow Triggers
 triggers:
-  # Context input trigger (traditional parallel mode)
+  # Legacy context input trigger (disabled - use sequential_context instead)
   context_input:
-    enabled: false  # Disabled in favor of sequential execution
+    enabled: false
     label: "context-input"
     process_edits: true
+    deprecated: true
+    replacement: "sequential_context"
   
   # Sequential context trigger (new)
   sequential_context:
@@ -193,11 +195,13 @@ triggers:
     event_type: "execute-sequential-task"
     workflow_file: "sequential-task-executor.yml"
   
-  # Auto-implement trigger (legacy, disabled for sequential)
+  # Legacy auto-implement trigger (disabled - not needed in sequential mode)
   auto_implement:
-    enabled: false  # Not needed in sequential mode
+    enabled: false
     label: "auto-implement"
     ignore_labels: ["in-progress", "blocked"]
+    deprecated: true
+    note: "Sequential execution handles task chaining automatically"
   
   # PR assistant trigger
   pr_assistant:

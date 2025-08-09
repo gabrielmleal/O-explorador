@@ -1,23 +1,28 @@
 # Claude Code Project Guidelines
 
 ## Project Overview
-This is an automated workflow system that uses Claude Code to decompose requirements into tasks, create GitHub issues, and automatically generate pull requests for implementation.
+This is an automated sequential workflow system that uses Claude Code to decompose requirements into sequential tasks and automatically generate stacked pull requests for implementation. Each task builds on the changes from previous tasks, creating a progressive implementation chain.
 
 ## Architecture
 
 ### Core Components
 1. **GitHub Workflows** (`.github/workflows/`)
-   - `context-to-tasks.yml`: Main orchestrator using Claude Code action for task decomposition
-   - `issue-to-pr.yml`: Automatic PR creation from issues using Claude Code CLI
+   - `context-to-sequential-tasks.yml`: Sequential task decomposition and initialization
+   - `sequential-task-executor.yml`: Individual task execution with automatic chaining
+   - `sequential-task-recovery.yml`: Error recovery and state management
+   - `context-to-tasks.yml`: Legacy parallel orchestrator (deprecated)
+   - `issue-to-pr.yml`: Legacy PR creation (deprecated)
    - `claude-pr.yml`: Interactive PR assistant
 
 2. **Configuration** (`config/`)
    - `workflow-config.yml`: Workflow settings and parameters
 
-3. **Integration Approach**
-   - Uses `anthropics/claude-code-action@beta` for task decomposition
-   - Uses `claude-code` CLI for issue implementation
-   - Inline JavaScript in GitHub Actions for issue creation and workflow orchestration
+3. **Sequential Integration Approach**
+   - Uses `anthropics/claude-code-action@beta` for task decomposition and implementation
+   - Implements state-driven sequential execution with `.github/sequential-tasks-state.json`
+   - Creates stacked PRs where each task builds on previous task's branch
+   - Automatic task chaining via `repository_dispatch` events
+   - Comprehensive error recovery and state management systems
 
 ## Development Guidelines
 
@@ -160,7 +165,7 @@ This is an automated workflow system that uses Claude Code to decompose requirem
 1. Break down complex requirements systematically
 2. Prioritize tasks based on dependencies
 3. Group related tasks together
-4. Identify parallel execution opportunities
+4. Plan sequential task dependencies and execution order
 
 ### Issue Management
 1. Use consistent labeling scheme

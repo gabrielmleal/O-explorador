@@ -44,8 +44,9 @@ jobs:
               
               // Set outputs for next steps
               core.setOutput('task_title', taskContext.taskData.title);
-              core.setOutput('task_index', taskContext.taskIndex);
-              core.setOutput('total_tasks', taskContext.totalTasks);
+              core.setOutput('task_index', taskContext.taskIndex.toString());
+              core.setOutput('task_number', (taskContext.taskIndex + 1).toString());
+              core.setOutput('total_tasks', taskContext.totalTasks.toString());
               core.setOutput('current_branch', taskContext.currentBranch);
               core.setOutput('previous_branch', taskContext.previousBranch);
               core.setOutput('task_prepared', 'true');
@@ -61,7 +62,7 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           custom_instructions: |
-            You are implementing Task ${{ steps.prepare-task.outputs.task_index + 1 }} of ${{ steps.prepare-task.outputs.total_tasks }} in a SEQUENTIAL task execution system.
+            You are implementing Task ${{ steps.prepare-task.outputs.task_number }} of ${{ steps.prepare-task.outputs.total_tasks }} in a SEQUENTIAL task execution system.
 
             CRITICAL CONTEXT: This task builds on previous tasks' changes. You are currently working on branch ${{ steps.prepare-task.outputs.current_branch }} which was created from ${{ steps.prepare-task.outputs.previous_branch }}.
 
@@ -248,7 +249,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: sequential-task-${{ steps.prepare-task.outputs.task_index || 'unknown' }}-artifacts
+          name: sequential-task-${{ steps.prepare-task.outputs.task_number || 'unknown' }}-artifacts
           path: |
             current-task-context.json
             .github/sequential-tasks-state.json

@@ -1,9 +1,7 @@
 const fs = require('fs');
-const path = require('path');
 const { execSync } = require('child_process');
 
 module.exports = async ({ github, context, core }) => {
-  const workflowToken = process.env.WORKFLOW_TRIGGER_TOKEN;
   const stateFilePath = '.github/sequential-tasks-state.json';
 
   // Load sequential tasks state
@@ -151,7 +149,7 @@ ${'---'}
 };
 
 // Post-implementation function to handle PR creation and next task triggering
-module.exports.handleTaskCompletion = async ({ github, context, core, taskContext }) => {
+module.exports.handleTaskCompletion = async ({ github, context, taskContext }) => {
   const workflowToken = process.env.WORKFLOW_TRIGGER_TOKEN;
   const stateFilePath = '.github/sequential-tasks-state.json';
   
