@@ -51,25 +51,104 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.WORKFLOW_TRIGGER_TOKEN || github.token }}
 
+      - name: Detect sequential task context and branch
+        id: detect-context
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            // Check if this is a sequential task by looking for context in the comment or issue
+            let isSequentialTask = false;
+            let targetBranch = null;
+            let sequentialContext = null;
+            
+            try {
+              // First, try to detect if this is part of sequential execution
+              // Check for current-task-context.json that might have been created by sequential-task-executor
+              if (fs.existsSync('current-task-context.json')) {
+                console.log('🔍 Found existing current-task-context.json - this is likely a sequential task');
+                const taskContext = JSON.parse(fs.readFileSync('current-task-context.json', 'utf8'));
+                isSequentialTask = true;
+                targetBranch = taskContext.currentBranch;
+                sequentialContext = taskContext;
+                console.log(`   - Sequential branch: ${targetBranch}`);
+              } else {
+                console.log('ℹ️ No current-task-context.json found - checking for sequential context in comment/issue');
+                
+                // Look for sequential context in the triggering comment/issue
+                let triggerText = '';
+                if (context.eventName === 'issue_comment') {
+                  triggerText = context.payload.comment.body;
+                } else if (context.eventName === 'issues') {
+                  triggerText = context.payload.issue.body;
+                }
+                
+                // Look for sequential context indicators in the text
+                const sequentialIndicators = [
+                  'Task \\d+ of \\d+',
+                  'SEQUENTIAL task execution',
+                  'Current Branch: `([^`]+)`',
+                  'branch `([^`]+)` which was created'
+                ];
+                
+                for (const pattern of sequentialIndicators) {
+                  const match = triggerText.match(new RegExp(pattern, 'i'));
+                  if (match) {
+                    console.log(`🎯 Found sequential indicator: ${pattern}`);
+                    isSequentialTask = true;
+                    
+                    // Try to extract branch name from the text
+                    const branchMatch = triggerText.match(/Current Branch: `([^`]+)`/) || 
+                                       triggerText.match(/branch `([^`]+)` which was created/) ||
+                                       triggerText.match(/working on branch `([^`]+)`/);
+                    
+                    if (branchMatch && branchMatch[1]) {
+                      targetBranch = branchMatch[1];
+                      console.log(`   - Extracted branch: ${targetBranch}`);
+                    }
+                    break;
+                  }
+                }
+              }
+              
+              // Set outputs for next steps
+              core.setOutput('is_sequential_task', isSequentialTask.toString());
+              core.setOutput('target_branch', targetBranch || '');
+              core.setOutput('has_context', sequentialContext !== null ? 'true' : 'false');
+              
+              console.log(`✅ Context detection complete:`);
+              console.log(`   - Is sequential task: ${isSequentialTask}`);
+              console.log(`   - Target branch: ${targetBranch || 'default'}`);
+              console.log(`   - Has context: ${sequentialContext !== null}`);
+              
+            } catch (error) {
+              console.log('❌ Error during context detection:', error.message);
+              console.log('🔄 Falling back to standalone mode');
+              
+              core.setOutput('is_sequential_task', 'false');
+              core.setOutput('target_branch', '');
+              core.setOutput('has_context', 'false');
+            }
+
       - name: Run Claude Code Action
         uses: anthropics/claude-code-action@beta
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           trigger_phrase: '@claude'
-          label_trigger: 'claude'
-          branch_prefix: 'claude/'
-          mode: 'tag'
+          base_branch: ${{ steps.detect-context.outputs.target_branch || github.event.repository.default_branch }}
+          timeout_minutes: 30
           use_bedrock: false
           use_vertex: false
-          timeout_minutes: 30
-          use_sticky_comment: false
-          use_commit_signing: false
 
       - name: Handle sequential task completion
         if: always()
         uses: actions/github-script@v7
         env:
           WORKFLOW_TRIGGER_TOKEN: ${{ secrets.WORKFLOW_TRIGGER_TOKEN }}
+          IS_SEQUENTIAL_TASK: ${{ steps.detect-context.outputs.is_sequential_task }}
+          TARGET_BRANCH: ${{ steps.detect-context.outputs.target_branch }}
+          HAS_CONTEXT: ${{ steps.detect-context.outputs.has_context }}
         with:
           github-token: ${{ secrets.WORKFLOW_TRIGGER_TOKEN || github.token }}
           script: |
@@ -77,18 +156,55 @@ jobs:
             const fs = require('fs');
             
             try {
+              const isSequentialTask = process.env.IS_SEQUENTIAL_TASK === 'true';
+              const targetBranch = process.env.TARGET_BRANCH;
+              const hasContext = process.env.HAS_CONTEXT === 'true';
+              
+              console.log(`🔍 Sequential task completion check:`);
+              console.log(`   - Is sequential task: ${isSequentialTask}`);
+              console.log(`   - Target branch: ${targetBranch || 'none'}`);
+              console.log(`   - Has context: ${hasContext}`);
+              
+              if (!isSequentialTask) {
+                console.log('ℹ️ Not a sequential task - skipping sequential completion handling');
+                return;
+              }
+              
               // Check if this is part of a sequential execution
               const currentTaskContextFile = 'current-task-context.json';
               
               if (!fs.existsSync(currentTaskContextFile)) {
-                console.log('ℹ️ No sequential task context found - this appears to be a standalone Claude Code execution');
+                console.log('❌ Sequential task detected but no context file found');
+                console.log('🔍 This might indicate Claude Code Action ran on wrong branch');
+                console.log(`   - Expected branch: ${targetBranch}`);
+                console.log(`   - Context file missing: ${currentTaskContextFile}`);
+                
+                // Try to provide helpful error information
+                const currentBranch = await github.rest.repos.getBranch({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  branch: context.sha
+                }).catch(() => null);
+                
+                console.log(`   - Current HEAD: ${context.sha}`);
+                
+                core.setFailed('Sequential task context file not found. Claude Code Action may have used wrong branch.');
                 return;
               }
               
-              console.log('🔍 Sequential task context found - handling task completion');
+              console.log('✅ Sequential task context found - handling completion');
               
               const taskContext = JSON.parse(fs.readFileSync(currentTaskContextFile, 'utf8'));
               console.log(`📋 Processing completion for Task ${taskContext.taskIndex + 1}: ${taskContext.taskData.title}`);
+              console.log(`🌿 Task context branch: ${taskContext.currentBranch}`);
+              console.log(`🎯 Detected branch: ${targetBranch}`);
+              
+              // Verify branch consistency
+              if (targetBranch && taskContext.currentBranch !== targetBranch) {
+                console.log(`⚠️ Branch mismatch detected:`);
+                console.log(`   - Task context branch: ${taskContext.currentBranch}`);
+                console.log(`   - Detected branch: ${targetBranch}`);
+              }
               
               // Import the task completion handler
               const executeSequentialTask = require(path.join(process.cwd(), 'scripts', 'execute-sequential-task.js'));
@@ -166,16 +282,19 @@ jobs:
             }
 
       - name: Create sequential progress update
-        if: always()
+        if: always() && steps.detect-context.outputs.is_sequential_task == 'true'
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
             
             try {
-              // Only create progress updates for sequential tasks
+              console.log('📊 Creating sequential progress update');
+              
+              // Verify context file exists (should exist if is_sequential_task is true)
               if (!fs.existsSync('current-task-context.json')) {
-                console.log('ℹ️ Skipping progress update - not a sequential task');
+                console.log('❌ Sequential task flagged but no context file found');
+                console.log('🔍 This indicates a branch coordination issue');
                 return;
               }
               
