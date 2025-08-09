@@ -3,6 +3,25 @@ const fs = require('fs');
 module.exports = async ({ github, context, core }) => {
   // Set up GitHub client with workflow token for comments
   const workflowToken = process.env.WORKFLOW_TRIGGER_TOKEN;
+  
+  // Helper function to create comments with fallback
+  const createComment = async (commentData) => {
+    try {
+      return await github.rest.issues.createComment(commentData);
+    } catch (error) {
+      if (error.message.includes('Resource not accessible by personal access token')) {
+        console.log('⚠️ PAT token lacks permissions for comments. This means:');
+        console.log('   - Comments will appear as from github-actions bot instead of your account');
+        console.log('   - Workflow triggering may not work properly');
+        console.log('   - Please check PAT permissions: issues:write, metadata:read, contents:read');
+        
+        // Log the specific error for debugging
+        console.log(`PAT Error: ${error.message}`);
+        throw error;
+      }
+      throw error;
+    }
+  };
 
   // Check if tasks.json exists
   if (!fs.existsSync('tasks.json')) {
@@ -10,12 +29,16 @@ module.exports = async ({ github, context, core }) => {
     
     const parentIssue = process.env.PARENT_ISSUE_NUMBER || context.payload.issue?.number;
     if (parentIssue) {
-      await github.rest.issues.createComment({
-        owner: context.repo.owner,
-        repo: context.repo.repo,
-        issue_number: parseInt(parentIssue),
-        body: '❌ **Task decomposition failed** - Claude Code was unable to generate the tasks.json file. Please check the context input and try again.'
-      });
+      try {
+        await createComment({
+          owner: context.repo.owner,
+          repo: context.repo.repo,
+          issue_number: parseInt(parentIssue),
+          body: '❌ **Task decomposition failed** - Claude Code was unable to generate the tasks.json file. Please check the context input and try again.'
+        });
+      } catch (commentError) {
+        console.log('Failed to create error comment, continuing with error:', commentError.message);
+      }
     }
     
     throw new Error('tasks.json file was not created by Claude Code');
@@ -31,12 +54,16 @@ module.exports = async ({ github, context, core }) => {
     
     const parentIssue = process.env.PARENT_ISSUE_NUMBER || context.payload.issue?.number;
     if (parentIssue) {
-      await github.rest.issues.createComment({
-        owner: context.repo.owner,
-        repo: context.repo.repo,
-        issue_number: parseInt(parentIssue),
-        body: `❌ **Task decomposition failed** - tasks.json file is invalid: ${error.message}`
-      });
+      try {
+        await createComment({
+          owner: context.repo.owner,
+          repo: context.repo.repo,
+          issue_number: parseInt(parentIssue),
+          body: `❌ **Task decomposition failed** - tasks.json file is invalid: ${error.message}`
+        });
+      } catch (commentError) {
+        console.log('Failed to create error comment, continuing with error:', commentError.message);
+      }
     }
     
     throw new Error('Invalid tasks.json file');
@@ -75,7 +102,7 @@ module.exports = async ({ github, context, core }) => {
 
   // Create task progress tracking comment first using workflow token
   
-  const progressComment = await github.rest.issues.createComment({
+  await createComment({
     owner: context.repo.owner,
     repo: context.repo.repo,
     issue_number: parseInt(parentIssue),
@@ -86,7 +113,7 @@ Created ${tasks.length} implementation tasks:
 ${tasks.map((task, i) => `- [ ] **Task ${i + 1}**: ${task.title}`).join('\n')}
 
 ${'---'}
-*Each task will automatically trigger Claude to create a PR when the task comment is created.*`
+*Each task comment will automatically trigger the implementation workflow to create a PR.*`
   });
 
   // Create individual task comments
@@ -101,7 +128,7 @@ ${'---'}
     };
     
     try {
-      const comment = await github.rest.issues.createComment({
+      const comment = await createComment({
         owner: context.repo.owner,
         repo: context.repo.repo,
         issue_number: parseInt(parentIssue),
@@ -110,30 +137,8 @@ ${'---'}
 @claude Please implement this task.`
       });
       
-      // Trigger task implementation workflow via repository dispatch
-      try {        
-        if (workflowToken) {
-          await github.rest.repos.createDispatchEvent({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            event_type: 'implement-task',
-            client_payload: {
-              task_id: i + 1,
-              task_data: taskData,
-              comment_id: comment.data.id,
-              issue_number: parseInt(parentIssue)
-            }
-          });
-          
-          console.log(`✅ Workflow dispatch triggered for task ${i + 1}`);
-        } else {
-          console.log(`⚠️ WORKFLOW_TRIGGER_TOKEN not found - workflow dispatch skipped for task ${i + 1}`);
-          console.log('Please configure WORKFLOW_TRIGGER_TOKEN secret to enable automatic PR creation');
-        }
-      } catch (dispatchError) {
-        console.log(`⚠️ Failed to trigger workflow for task ${i + 1}: ${dispatchError.message}`);
-        console.log('Task comment created but automatic PR generation may not work');
-      }
+      console.log(`✅ Task comment created - workflow will be triggered automatically`);
+      console.log(`   Comment ID: ${comment.data.id} contains @claude trigger`);
       
       createdTasks.push(taskData.id);
       console.log(`✅ Created task comment ${i + 1}: ${task.title}`);
