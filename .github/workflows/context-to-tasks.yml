@@ -51,19 +51,47 @@ jobs:
 
             Max tasks: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.max_tasks || '10' }}
 
-      - name: Create task comments from tasks
+      - name: Create task comments from tasks (with PAT)
+        id: create-comments-pat
+        continue-on-error: true
         uses: actions/github-script@v7
         env:
           PARENT_ISSUE_NUMBER: ${{ github.event.issue.number }}
           WORKFLOW_TRIGGER_TOKEN: ${{ secrets.WORKFLOW_TRIGGER_TOKEN }}
         with:
-          github-token: ${{ secrets.WORKFLOW_TRIGGER_TOKEN || github.token }}
+          github-token: ${{ secrets.WORKFLOW_TRIGGER_TOKEN }}
           script: |
             const path = require('path');
             const createTaskComments = require(path.join(process.cwd(), 'scripts', 'create-task-comments.js'));
             
             try {
               await createTaskComments({ github, context, core });
+              console.log('✅ Task comments created with PAT token (comments appear under your account)');
+            } catch (error) {
+              console.log('❌ PAT token failed:', error.message);
+              throw error;
+            }
+      
+      - name: Create task comments from tasks (fallback with default token)
+        if: steps.create-comments-pat.outcome == 'failure'
+        uses: actions/github-script@v7
+        env:
+          PARENT_ISSUE_NUMBER: ${{ github.event.issue.number }}
+          WORKFLOW_TRIGGER_TOKEN: ${{ secrets.WORKFLOW_TRIGGER_TOKEN }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const path = require('path');
+            const createTaskComments = require(path.join(process.cwd(), 'scripts', 'create-task-comments.js'));
+            
+            console.log('⚠️ Using fallback mode with GITHUB_TOKEN:');
+            console.log('   - Comments will appear as from github-actions bot');
+            console.log('   - Automatic workflow triggering may not work');
+            console.log('   - Configure WORKFLOW_TRIGGER_TOKEN secret for full functionality');
+            
+            try {
+              await createTaskComments({ github, context, core });
+              console.log('✅ Task comments created with fallback token');
             } catch (error) {
               console.log('❌ Task comment creation failed:', error.message);
               core.setFailed(error.message);

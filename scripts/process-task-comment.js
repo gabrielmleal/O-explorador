@@ -1,15 +1,22 @@
 module.exports = async ({ github, context }) => {
-  // Extract task data from repository dispatch payload
-  const clientPayload = context.payload.client_payload;
-  console.log('Client payload:', clientPayload);
+  // Extract task data from comment body
+  const commentBody = context.payload.comment.body;
+  const commentId = context.payload.comment.id;
+  console.log('Comment body:', commentBody);
   
-  if (!clientPayload || !clientPayload.task_data || !clientPayload.task_id) {
-    throw new Error('Missing required task data in repository dispatch payload');
+  // Parse task data from comment using regex to extract JSON
+  const taskMatch = commentBody.match(/🤖 TASK-(\d+): ({[\s\S]*?})\s*(?:\n|$)/);
+  if (!taskMatch) {
+    throw new Error('Could not find task data in comment body');
   }
   
-  const taskData = clientPayload.task_data;
-  const taskId = clientPayload.task_id;
-  const commentId = clientPayload.comment_id;
+  const taskId = taskMatch[1];
+  let taskData;
+  try {
+    taskData = JSON.parse(taskMatch[2]);
+  } catch (error) {
+    throw new Error(`Failed to parse task data JSON: ${error.message}`);
+  }
   
   console.log('Parsed task data:', taskData);
   

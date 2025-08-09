@@ -1,12 +1,17 @@
 name: Task Implementation to PR Automation
 
 on:
-  repository_dispatch:
-    types: [implement-task]
+  issue_comment:
+    types: [created]
 
 jobs:
   implement-task:
     runs-on: ubuntu-latest
+    if: |
+      github.event.issue && 
+      contains(github.event.comment.body, '@claude') &&
+      contains(github.event.comment.body, '🤖 TASK-') &&
+      !github.event.issue.pull_request
     
     permissions:
       contents: write
