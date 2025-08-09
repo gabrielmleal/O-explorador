@@ -1,32 +1,40 @@
 const { execSync } = require('child_process');
 
-module.exports = async ({ github, context, taskData, taskId, commentId }) => {
-  const issueNumber = context.payload.client_payload.issue_number;
+module.exports = async ({ github, context, taskData, taskId, issueNumber }) => {
   
   // Check if any files were modified
   const status = execSync('git status --porcelain', { encoding: 'utf8' });
   if (!status.trim()) {
     console.log('No changes made, updating task status to no-changes');
     
-    // Update task comment status
+    // Update task issue status
     taskData.status = 'no-changes';
-    const updatedComment = `🤖 TASK-${taskId}: ${JSON.stringify(taskData, null, 2)}
-
-@claude Please implement this task.`;
     
-    await github.rest.issues.updateComment({
+    // Get current issue body and update the task data JSON
+    const { data: issue } = await github.rest.issues.get({
       owner: context.repo.owner,
       repo: context.repo.repo,
-      comment_id: commentId,
-      body: updatedComment
+      issue_number: issueNumber
     });
     
-    // Comment on the main issue  
+    const updatedIssueBody = issue.body.replace(
+      /```json\s*({\s*[\s\S]*?})\s*```/,
+      `\`\`\`json\n${JSON.stringify(taskData, null, 2)}\n\`\`\``
+    );
+    
+    await github.rest.issues.update({
+      owner: context.repo.owner,
+      repo: context.repo.repo,
+      issue_number: issueNumber,
+      body: updatedIssueBody
+    });
+    
+    // Add a comment to indicate no changes were needed
     await github.rest.issues.createComment({
       owner: context.repo.owner,
       repo: context.repo.repo,
       issue_number: issueNumber,
-      body: `⚠️ **Task ${taskId} - No changes needed** - Claude determined that no changes were required for "${taskData.title}".`
+      body: `⚠️ **No changes needed** - Claude determined that no changes were required for this task.`
     });
     
     return null; // No PR created
@@ -82,15 +90,24 @@ ${'---'}
   // Update task status to completed
   taskData.status = 'completed';
   taskData.pr_number = pr.number;
-  const updatedComment = `🤖 TASK-${taskId}: ${JSON.stringify(taskData, null, 2)}
-
-@claude Please implement this task.`;
   
-  await github.rest.issues.updateComment({
+  // Get current issue body and update the task data JSON
+  const { data: completedIssue } = await github.rest.issues.get({
     owner: context.repo.owner,
     repo: context.repo.repo,
-    comment_id: commentId,
-    body: updatedComment
+    issue_number: issueNumber
+  });
+  
+  const updatedCompletedIssueBody = completedIssue.body.replace(
+    /```json\s*({\s*[\s\S]*?})\s*```/,
+    `\`\`\`json\n${JSON.stringify(taskData, null, 2)}\n\`\`\``
+  );
+  
+  await github.rest.issues.update({
+    owner: context.repo.owner,
+    repo: context.repo.repo,
+    issue_number: issueNumber,
+    body: updatedCompletedIssueBody
   });
 
   // Add labels to PR
@@ -101,15 +118,17 @@ ${'---'}
     labels: ['claude-generated', 'needs-review', `task-${taskId}`]
   });
 
-  // Update main issue with progress
+  // Add completion comment to task issue
   await github.rest.issues.createComment({
     owner: context.repo.owner,
     repo: context.repo.repo,
     issue_number: issueNumber,
-    body: `✅ **Task ${taskId} Complete** - "${taskData.title}" has been implemented.
+    body: `✅ **Task Complete** - This task has been implemented successfully.
 
 📋 **PR Created**: #${pr.number}
-🔄 **Status**: Ready for review`
+🔄 **Status**: Ready for review
+
+This issue will be automatically closed when the PR is merged.`
   });
 
   console.log(`✅ Successfully created PR #${pr.number} for Task ${taskId}`);

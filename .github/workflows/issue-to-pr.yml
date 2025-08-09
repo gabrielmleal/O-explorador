@@ -1,16 +1,16 @@
 name: Task Implementation to PR Automation
 
 on:
-  issue_comment:
-    types: [created]
+  issues:
+    types: [opened]
 
 jobs:
   implement-task:
     runs-on: ubuntu-latest
     if: |
       github.event.issue && 
-      contains(github.event.comment.body, '@claude') &&
-      contains(github.event.comment.body, '🤖 TASK-') &&
+      contains(github.event.issue.labels.*.name, 'claude-task') &&
+      contains(github.event.issue.body, '@claude') &&
       !github.event.issue.pull_request
     
     permissions:
@@ -32,13 +32,13 @@ jobs:
         with:
           script: |
             const path = require('path');
-            const processTaskComment = require(path.join(process.cwd(), 'scripts', 'process-task-comment.js'));
+            const processTaskIssue = require(path.join(process.cwd(), 'scripts', 'process-task-issue.js'));
             
             try {
-              const result = await processTaskComment({ github, context });
+              const result = await processTaskIssue({ github, context });
               core.setOutput('task_data', JSON.stringify(result.taskData));
               core.setOutput('task_id', result.taskId);
-              core.setOutput('comment_id', result.commentId);
+              core.setOutput('issue_number', result.issueNumber);
             } catch (error) {
               console.log('❌ Task parsing failed:', error.message);
               core.setFailed(error.message);
@@ -73,10 +73,10 @@ jobs:
             // Get task data from previous step
             const taskData = JSON.parse('${{ steps.parse-task.outputs.task_data }}');
             const taskId = '${{ steps.parse-task.outputs.task_id }}';
-            const commentId = '${{ steps.parse-task.outputs.comment_id }}';
+            const issueNumber = '${{ steps.parse-task.outputs.issue_number }}';
             
             try {
-              const prNumber = await createPrFromTask({ github, context, taskData, taskId, commentId });
+              const prNumber = await createPrFromTask({ github, context, taskData, taskId, issueNumber });
               if (prNumber) {
                 console.log(`✅ PR #${prNumber} created successfully`);
               } else {
