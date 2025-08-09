@@ -122,36 +122,30 @@ jobs:
               const currentBranch = '${{ steps.prepare-task.outputs.current_branch }}';
               const previousBranch = '${{ steps.prepare-task.outputs.previous_branch }}';
               
-              const claudeInstructions = `@claude You are implementing Task ${taskNumber} of ${totalTasks} in a SEQUENTIAL task execution system.
-
-**CRITICAL CONTEXT**: This task builds on previous tasks' changes. You are currently working on branch \`${currentBranch}\` which was created from \`${previousBranch}\`.
-
-**TASK TO IMPLEMENT**: ${taskTitle}
-
-**SEQUENTIAL EXECUTION CONTEXT**:
-- Task Index: ${taskNumber}/${totalTasks}
-- Current Branch: \`${currentBranch}\`
-- Base Branch: \`${previousBranch}\`
-- Task Context: Available in \`current-task-context.json\`
-
-**INSTRUCTIONS**:
-1. Read \`CLAUDE.md\` for project guidelines
-2. Read \`current-task-context.json\` for full sequential context  
-3. Examine existing code to understand previous tasks' implementations
-4. Implement this specific task building on existing changes
-5. Follow project conventions and best practices
-6. Create/modify all necessary files for this task
-7. Ensure code is production-ready with proper error handling
-8. Write tests if the project has testing infrastructure
-
-**IMPORTANT SEQUENTIAL CONSIDERATIONS**: 
-- You're working with cumulative changes from previous tasks
-- Focus only on implementing this specific task
-- Build upon and integrate with existing code from previous tasks  
-- Do not redo work from previous tasks unless necessary for integration
-- Your changes will be reviewed as part of a stacked PR system
-
-**WORKFLOW INTEGRATION**: This comment was automatically created by Sequential Task Executor. Once you complete this task, the system will automatically create a PR and trigger the next task if applicable.`;
+              const claudeInstructions = '@claude You are implementing Task ' + taskNumber + ' of ' + totalTasks + ' in a SEQUENTIAL task execution system.\n\n' +
+                '**CRITICAL CONTEXT**: This task builds on previous tasks\\' changes. You are currently working on branch `' + currentBranch + '` which was created from `' + previousBranch + '`.\n\n' +
+                '**TASK TO IMPLEMENT**: ' + taskTitle + '\n\n' +
+                '**SEQUENTIAL EXECUTION CONTEXT**:\n' +
+                '- Task Index: ' + taskNumber + '/' + totalTasks + '\n' +
+                '- Current Branch: `' + currentBranch + '`\n' +
+                '- Base Branch: `' + previousBranch + '`\n' +
+                '- Task Context: Available in `current-task-context.json`\n\n' +
+                '**INSTRUCTIONS**:\n' +
+                '1. Read `CLAUDE.md` for project guidelines\n' +
+                '2. Read `current-task-context.json` for full sequential context\n' +
+                '3. Examine existing code to understand previous tasks\\' implementations\n' +
+                '4. Implement this specific task building on existing changes\n' +
+                '5. Follow project conventions and best practices\n' +
+                '6. Create/modify all necessary files for this task\n' +
+                '7. Ensure code is production-ready with proper error handling\n' +
+                '8. Write tests if the project has testing infrastructure\n\n' +
+                '**IMPORTANT SEQUENTIAL CONSIDERATIONS**:\n' +
+                '- You\\'re working with cumulative changes from previous tasks\n' +
+                '- Focus only on implementing this specific task\n' +
+                '- Build upon and integrate with existing code from previous tasks\n' +
+                '- Do not redo work from previous tasks unless necessary for integration\n' +
+                '- Your changes will be reviewed as part of a stacked PR system\n\n' +
+                '**WORKFLOW INTEGRATION**: This comment was automatically created by Sequential Task Executor. Once you complete this task, the system will automatically create a PR and trigger the next task if applicable.';
 
               const { data: comment } = await github.rest.issues.createComment({
                 owner: context.repo.owner,
