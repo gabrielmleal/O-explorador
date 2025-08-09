@@ -1,13 +1,25 @@
 const fs = require('fs');
 
 module.exports = async ({ github, context, core }) => {
+  // Set up GitHub client with workflow token for comments
+  const workflowToken = process.env.WORKFLOW_TRIGGER_TOKEN;
+  let commentGithub = github;
+  
+  if (workflowToken) {
+    const { Octokit } = require('@octokit/rest');
+    commentGithub = new Octokit({
+      auth: workflowToken,
+      baseUrl: 'https://api.github.com'
+    });
+  }
+
   // Check if tasks.json exists
   if (!fs.existsSync('tasks.json')) {
     console.log('❌ tasks.json not found - Claude Code may have failed to generate the file');
     
     const parentIssue = process.env.PARENT_ISSUE_NUMBER || context.payload.issue?.number;
     if (parentIssue) {
-      await github.rest.issues.createComment({
+      await commentGithub.rest.issues.createComment({
         owner: context.repo.owner,
         repo: context.repo.repo,
         issue_number: parseInt(parentIssue),
@@ -28,7 +40,7 @@ module.exports = async ({ github, context, core }) => {
     
     const parentIssue = process.env.PARENT_ISSUE_NUMBER || context.payload.issue?.number;
     if (parentIssue) {
-      await github.rest.issues.createComment({
+      await commentGithub.rest.issues.createComment({
         owner: context.repo.owner,
         repo: context.repo.repo,
         issue_number: parseInt(parentIssue),
@@ -70,8 +82,9 @@ module.exports = async ({ github, context, core }) => {
   console.log(`Creating ${tasks.length} task comments...`);
   const createdTasks = [];
 
-  // Create task progress tracking comment first
-  const progressComment = await github.rest.issues.createComment({
+  // Create task progress tracking comment first using workflow token
+  
+  const progressComment = await commentGithub.rest.issues.createComment({
     owner: context.repo.owner,
     repo: context.repo.repo,
     issue_number: parseInt(parentIssue),
@@ -97,7 +110,7 @@ ${'---'}
     };
     
     try {
-      const comment = await github.rest.issues.createComment({
+      const comment = await commentGithub.rest.issues.createComment({
         owner: context.repo.owner,
         repo: context.repo.repo,
         issue_number: parseInt(parentIssue),
@@ -107,19 +120,9 @@ ${'---'}
       });
       
       // Trigger task implementation workflow via repository dispatch
-      try {
-        // Use PAT token for workflow triggering if available
-        const workflowToken = process.env.WORKFLOW_TRIGGER_TOKEN;
-        
+      try {        
         if (workflowToken) {
-          // Create separate GitHub client with PAT for workflow triggering
-          const { Octokit } = require('@octokit/rest');
-          const workflowGithub = new Octokit({
-            auth: workflowToken,
-            baseUrl: 'https://api.github.com'
-          });
-          
-          await workflowGithub.rest.repos.createDispatchEvent({
+          await commentGithub.rest.repos.createDispatchEvent({
             owner: context.repo.owner,
             repo: context.repo.repo,
             event_type: 'implement-task',
