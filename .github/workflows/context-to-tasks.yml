@@ -57,6 +57,7 @@ jobs:
           PARENT_ISSUE_NUMBER: ${{ github.event.issue.number }}
           WORKFLOW_TRIGGER_TOKEN: ${{ secrets.WORKFLOW_TRIGGER_TOKEN }}
         with:
+          github-token: ${{ secrets.WORKFLOW_TRIGGER_TOKEN || github.token }}
           script: |
             const path = require('path');
             const createTaskComments = require(path.join(process.cwd(), 'scripts', 'create-task-comments.js'));
