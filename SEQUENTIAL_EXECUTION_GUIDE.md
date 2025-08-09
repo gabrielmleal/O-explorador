@@ -2,7 +2,7 @@
 
 ## Overview
 
-This system transforms the parallel task execution into a sophisticated sequential execution architecture where each task builds on the changes from previous tasks, creating a chain of stacked PRs.
+This is a sophisticated sequential task execution system where each task builds on the changes from previous tasks, creating a chain of stacked PRs for progressive implementation.
 
 ## Architecture
 
@@ -233,21 +233,6 @@ cat .github/sequential-tasks-state.json | jq '.'
 - Monitor the sequential state file for detailed status
 - Use recovery workflows for error handling
 - Keep sequential chains reasonably sized (≤ 10 tasks)
-
-## Migration from Parallel System
-
-### Key Changes
-1. **Workflows**: New sequential workflows replace parallel ones
-2. **State Management**: Centralized state file instead of individual issues
-3. **PR Strategy**: Stacked PRs instead of independent PRs to main
-4. **Triggers**: `sequential-context` label instead of `context-input`
-5. **Recovery**: New manual recovery workflows for error handling
-
-### Backwards Compatibility
-- Old `context-input` label is disabled but workflows remain
-- Existing parallel workflows will continue to work
-- Can run both systems side-by-side if needed
-- Configuration clearly separates sequential vs parallel settings
 
 ## Advanced Usage
 

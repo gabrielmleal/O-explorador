@@ -10,19 +10,27 @@ This is an automated sequential workflow system that uses Claude Code to decompo
    - `context-to-sequential-tasks.yml`: Sequential task decomposition and initialization
    - `sequential-task-executor.yml`: Individual task execution with automatic chaining
    - `sequential-task-recovery.yml`: Error recovery and state management
-   - `context-to-tasks.yml`: Legacy parallel orchestrator (deprecated)
-   - `issue-to-pr.yml`: Legacy PR creation (deprecated)
    - `claude-pr.yml`: Interactive PR assistant
 
-2. **Configuration** (`config/`)
-   - `workflow-config.yml`: Workflow settings and parameters
+2. **Scripts** (`scripts/`)
+   - `setup-sequential-tasks.js`: Task decomposition and state initialization
+   - `execute-sequential-task.js`: Task execution, PR creation, and chaining logic
+   - `sequential-task-recovery.js`: Error recovery and state management utilities
 
-3. **Sequential Integration Approach**
+3. **Configuration** (`config/`)
+   - `workflow-config.yml`: Sequential execution settings and parameters
+
+4. **State Management**
+   - `.github/sequential-tasks-state.json`: Persistent state tracking for task chains
+   - Automatic state backup and recovery capabilities
+   - Progress tracking and error handling
+
+5. **Sequential Integration Approach**
    - Uses `anthropics/claude-code-action@beta` for task decomposition and implementation
-   - Implements state-driven sequential execution with `.github/sequential-tasks-state.json`
+   - State-driven sequential execution with automatic task chaining
    - Creates stacked PRs where each task builds on previous task's branch
-   - Automatic task chaining via `repository_dispatch` events
-   - Comprehensive error recovery and state management systems
+   - Automatic task triggering via `repository_dispatch` events
+   - Comprehensive error recovery and resume capabilities
 
 ## Development Guidelines
 
