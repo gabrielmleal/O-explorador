@@ -101,6 +101,44 @@ jobs:
               core.setFailed(`Task preparation failed: ${error.message}`);
             }
 
+      - name: Verify branch availability
+        if: steps.prepare-task.outputs.task_prepared == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.WORKFLOW_TRIGGER_TOKEN || github.token }}
+          script: |
+            const currentBranch = '${{ steps.prepare-task.outputs.current_branch }}';
+            
+            // Wait a moment for branch to be available on remote
+            console.log(`🔍 Verifying branch ${currentBranch} is available on remote...`);
+            
+            let retries = 0;
+            const maxRetries = 10;
+            
+            while (retries < maxRetries) {
+              try {
+                await github.rest.repos.getBranch({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  branch: currentBranch
+                });
+                
+                console.log(`✅ Branch ${currentBranch} confirmed available on remote`);
+                break;
+                
+              } catch (error) {
+                retries++;
+                console.log(`⏳ Branch not yet available (attempt ${retries}/${maxRetries}), waiting 2s...`);
+                
+                if (retries >= maxRetries) {
+                  throw new Error(`Branch ${currentBranch} not available after ${maxRetries} attempts: ${error.message}`);
+                }
+                
+                // Wait 2 seconds before retry
+                await new Promise(resolve => setTimeout(resolve, 2000));
+              }
+            }
+
       - name: Trigger Claude Code implementation via issue comment
         if: steps.prepare-task.outputs.task_prepared == 'true'
         uses: actions/github-script@v7
@@ -121,6 +159,8 @@ jobs:
               const totalTasks = '${{ steps.prepare-task.outputs.total_tasks }}';
               const currentBranch = '${{ steps.prepare-task.outputs.current_branch }}';
               const previousBranch = '${{ steps.prepare-task.outputs.previous_branch }}';
+              
+              console.log(`🤖 Triggering Claude Code Action for branch: ${currentBranch}`);
               
               const claudeInstructions = '@claude You are implementing Task ' + taskNumber + ' of ' + totalTasks + ' in a SEQUENTIAL task execution system.\\n\\n' +
                 '**CRITICAL CONTEXT**: This task builds on previous tasks changes. You are currently working on branch `' + currentBranch + '` which was created from `' + previousBranch + '`.\\n\\n' +

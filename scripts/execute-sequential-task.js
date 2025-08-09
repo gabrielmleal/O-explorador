@@ -45,18 +45,50 @@ module.exports = async ({ github, context, core }) => {
   let stateCommentId;
   try {
     console.log(`🔍 Loading sequential tasks state from issue #${parentIssue}`);
+    console.log(`📊 Repository: ${context.repo.owner}/${context.repo.repo}`);
+    console.log(`📨 Event: ${context.eventName}`);
+    
     const stateResult = await findStateComment(github, context.repo.owner, context.repo.repo, parentIssue);
     
     if (!stateResult) {
-      throw new Error('Sequential tasks state not found in issue comments. Sequential execution may not be initialized.');
+      const errorMsg = `Sequential tasks state not found in issue comments for issue #${parentIssue}. Sequential execution may not be initialized properly.`;
+      console.log('❌', errorMsg);
+      
+      // Try to post error comment on parent issue for debugging
+      try {
+        await github.rest.issues.createComment({
+          owner: context.repo.owner,
+          repo: context.repo.repo,
+          issue_number: parentIssue,
+          body: `## ❌ Sequential Task Execution Error
+
+**Error**: ${errorMsg}
+
+**Debugging Information**:
+- Repository: \`${context.repo.owner}/${context.repo.repo}\`
+- Event: \`${context.eventName}\`
+- Task Index: \`${taskIndex}\`
+- Previous Branch: \`${previousBranch}\`
+
+*This error occurred during sequential task preparation. Please check the workflow logs for more details.*`
+        });
+      } catch (commentError) {
+        console.log('⚠️ Could not post error comment:', commentError.message);
+      }
+      
+      throw new Error(errorMsg);
     }
     
     sequentialState = stateResult.state;
     stateCommentId = stateResult.comment_id;
     
     console.log(`✅ Loaded state with ${sequentialState.tasks.length} tasks`);
+    console.log(`📋 Current execution status: ${sequentialState.status}`);
+    console.log(`🔢 State comment ID: ${stateCommentId}`);
+    
   } catch (error) {
     console.log('❌ Failed to load sequential tasks state:', error.message);
+    console.log('🔍 Error details:', error);
     core.setFailed(`State management error: ${error.message}`);
     return;
   }
@@ -143,11 +175,20 @@ ${'---'}
     // Checkout the previous branch if it's not main
     if (previousBranch !== 'main') {
       try {
-        execSync(`git checkout -b temp-prev origin/${previousBranch}`);
-        execSync(`git checkout ${previousBranch}`);
+        // First check if branch exists remotely
+        const remoteBranchExists = execSync(`git ls-remote --heads origin ${previousBranch}`, { encoding: 'utf8' }).trim();
+        
+        if (remoteBranchExists) {
+          execSync(`git checkout -b temp-prev origin/${previousBranch}`, { stdio: 'pipe' });
+          execSync(`git checkout ${previousBranch}`, { stdio: 'pipe' });
+          console.log(`✅ Checked out existing branch: ${previousBranch}`);
+        } else {
+          console.log(`⚠️ Branch ${previousBranch} doesn't exist remotely, using main as base`);
+          execSync('git checkout main');
+        }
       } catch (error) {
         // If branch doesn't exist remotely, create it locally
-        console.log(`Branch ${previousBranch} doesn't exist remotely, using main as base`);
+        console.log(`⚠️ Branch ${previousBranch} doesn't exist remotely, using main as base`);
         execSync('git checkout main');
       }
     } else {
@@ -163,16 +204,77 @@ ${'---'}
   console.log(`🌿 Creating task branch: ${taskBranch}`);
   
   try {
-    // Delete branch if it already exists
+    console.log(`🔧 Git configuration check`);
+    console.log(`   - Current directory: ${process.cwd()}`);
+    
+    // Verify git repo
     try {
-      execSync(`git branch -D ${taskBranch}`);
-    } catch (e) {
-      // Branch doesn't exist, that's fine
+      const gitStatus = execSync('git status --porcelain', { encoding: 'utf8' });
+      console.log(`   - Git repo status: OK`);
+    } catch (gitError) {
+      throw new Error(`Not in a git repository: ${gitError.message}`);
     }
     
+    // Delete branch if it already exists locally
+    try {
+      const localBranches = execSync('git branch --list', { encoding: 'utf8' });
+      if (localBranches.includes(taskBranch)) {
+        execSync(`git branch -D ${taskBranch}`);
+        console.log(`🗑️ Deleted existing local branch: ${taskBranch}`);
+      }
+    } catch (e) {
+      console.log(`ℹ️ No local branch to delete: ${taskBranch}`);
+    }
+    
+    // Delete remote branch if it exists
+    try {
+      const remoteBranches = execSync('git branch -r', { encoding: 'utf8' });
+      if (remoteBranches.includes(`origin/${taskBranch}`)) {
+        execSync(`git push origin --delete ${taskBranch}`, { stdio: 'pipe' });
+        console.log(`🗑️ Deleted existing remote branch: ${taskBranch}`);
+      }
+    } catch (e) {
+      console.log(`ℹ️ No remote branch to delete: ${taskBranch}`);
+    }
+    
+    // Create and checkout new branch
+    console.log(`🌿 Creating new branch from current HEAD`);
     execSync(`git checkout -b ${taskBranch}`);
+    console.log(`✅ Created and checked out new branch: ${taskBranch}`);
+    
+    // Verify branch creation
+    const currentBranch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
+    if (currentBranch !== taskBranch) {
+      throw new Error(`Branch creation verification failed. Expected: ${taskBranch}, Actual: ${currentBranch}`);
+    }
+    
+    // Push branch to remote immediately to ensure Claude Code Action can access it
+    console.log(`🚀 Pushing branch to remote origin...`);
+    execSync(`git push -u origin ${taskBranch}`, { stdio: ['pipe', 'pipe', 'pipe'] });
+    console.log(`✅ Successfully pushed branch to remote: ${taskBranch}`);
+    
+    // Double-check remote branch exists
+    try {
+      const remoteBranchCheck = execSync(`git ls-remote --heads origin ${taskBranch}`, { encoding: 'utf8' });
+      if (!remoteBranchCheck.trim()) {
+        throw new Error(`Remote branch verification failed for ${taskBranch}`);
+      }
+      console.log(`🔍 Remote branch verification: ✅ ${taskBranch} exists on origin`);
+    } catch (verifyError) {
+      console.log(`⚠️ Remote branch verification warning: ${verifyError.message}`);
+    }
+    
   } catch (error) {
-    throw new Error(`Failed to create task branch ${taskBranch}: ${error.message}`);
+    console.log(`❌ Branch creation/push failed:`, error.message);
+    console.log(`🔍 Current git status:`);
+    try {
+      const gitStatus = execSync('git status', { encoding: 'utf8' });
+      console.log(gitStatus);
+    } catch (statusError) {
+      console.log(`Could not get git status: ${statusError.message}`);
+    }
+    
+    throw new Error(`Failed to create and push task branch ${taskBranch}: ${error.message}`);
   }
 
   // Return task execution context for Claude Code action
