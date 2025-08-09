@@ -36,9 +36,12 @@ This is an automated workflow system that uses Claude Code to decompose requirem
 
 ### GitHub Integration
 - Use GitHub tokens securely (never hardcode)
+- **CRITICAL**: Use `WORKFLOW_TRIGGER_TOKEN` (Fine-Grained PAT) for workflow dispatch events to avoid GitHub's workflow triggering restrictions
+- Regular GitHub operations use default `GITHUB_TOKEN`
 - Respect rate limits with appropriate delays
 - Handle GitHub API exceptions gracefully
 - Validate repository access before operations
+- See `WORKFLOW_SETUP.md` for PAT configuration instructions
 
 ### Claude Code Integration
 - Use structured prompts for consistent results
