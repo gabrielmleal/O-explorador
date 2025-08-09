@@ -184,7 +184,8 @@ ${'---'}
     currentBranch: taskBranch,
     parentIssue: sequentialState.parent_issue,
     sequentialContext: sequentialState.context,
-    previousTasks: sequentialState.tasks.slice(0, taskIndex)
+    previousTasks: sequentialState.tasks.slice(0, taskIndex),
+    stateCommentId: stateCommentId // Include state comment ID for updates
   };
 
   // Save task context for Claude Code action to use
@@ -194,6 +195,7 @@ ${'---'}
   console.log(`📝 Task: ${currentTask.title}`);
   console.log(`🌿 Branch: ${taskBranch}`);
   console.log(`📂 Base: ${previousBranch}`);
+  console.log(`🔗 State comment ID: ${stateCommentId}`);
   
   return taskContext;
 };
