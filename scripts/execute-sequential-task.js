@@ -248,8 +248,38 @@ ${'---'}
       throw new Error(`Branch creation verification failed. Expected: ${taskBranch}, Actual: ${currentBranch}`);
     }
     
+    // Create task execution context for Claude Code action BEFORE pushing
+    const taskContext = {
+      taskData: currentTask,
+      taskIndex: taskIndex,
+      totalTasks: sequentialState.tasks.length,
+      previousBranch: previousBranch,
+      currentBranch: taskBranch,
+      parentIssue: sequentialState.parent_issue,
+      sequentialContext: sequentialState.context,
+      previousTasks: sequentialState.tasks.slice(0, taskIndex),
+      stateCommentId: stateCommentId // Include state comment ID for updates
+    };
+
+    // Save task context for Claude Code action to use
+    console.log(`📋 Creating task context file for Claude Code Action`);
+    fs.writeFileSync('current-task-context.json', JSON.stringify(taskContext, null, 2));
+    
+    // Commit the context file to the branch before pushing
+    console.log(`💾 Committing task context to branch`);
+    execSync('git add current-task-context.json');
+    execSync(`git commit -m "Add sequential task context for Task ${taskIndex + 1}: ${currentTask.title}
+
+This context file contains all the information needed for Claude Code Action to understand and complete this sequential task.
+
+Task ${taskIndex + 1}/${sequentialState.tasks.length}: ${currentTask.title}
+Previous branch: ${previousBranch}
+Parent issue: #${sequentialState.parent_issue || 'N/A'}"`);
+    
+    console.log(`✅ Task context committed to branch: ${taskBranch}`);
+
     // Push branch to remote immediately to ensure Claude Code Action can access it
-    console.log(`🚀 Pushing branch to remote origin...`);
+    console.log(`🚀 Pushing branch with context to remote origin...`);
     execSync(`git push -u origin ${taskBranch}`, { stdio: ['pipe', 'pipe', 'pipe'] });
     console.log(`✅ Successfully pushed branch to remote: ${taskBranch}`);
     
@@ -277,8 +307,15 @@ ${'---'}
     throw new Error(`Failed to create and push task branch ${taskBranch}: ${error.message}`);
   }
 
-  // Return task execution context for Claude Code action
-  const taskContext = {
+  console.log('✅ Task execution environment prepared');
+  console.log(`📝 Task: ${currentTask.title}`);
+  console.log(`🌿 Branch: ${taskBranch}`);
+  console.log(`📂 Base: ${previousBranch}`);
+  console.log(`🔗 State comment ID: ${stateCommentId}`);
+  console.log(`📄 Context file: current-task-context.json committed and pushed`);
+  
+  // Return the already-created taskContext
+  return {
     taskData: currentTask,
     taskIndex: taskIndex,
     totalTasks: sequentialState.tasks.length,
@@ -287,19 +324,8 @@ ${'---'}
     parentIssue: sequentialState.parent_issue,
     sequentialContext: sequentialState.context,
     previousTasks: sequentialState.tasks.slice(0, taskIndex),
-    stateCommentId: stateCommentId // Include state comment ID for updates
+    stateCommentId: stateCommentId
   };
-
-  // Save task context for Claude Code action to use
-  fs.writeFileSync('current-task-context.json', JSON.stringify(taskContext, null, 2));
-
-  console.log('✅ Task execution environment prepared');
-  console.log(`📝 Task: ${currentTask.title}`);
-  console.log(`🌿 Branch: ${taskBranch}`);
-  console.log(`📂 Base: ${previousBranch}`);
-  console.log(`🔗 State comment ID: ${stateCommentId}`);
-  
-  return taskContext;
 };
 
 // Post-implementation function to handle PR creation and next task triggering
