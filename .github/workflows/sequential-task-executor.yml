@@ -62,7 +62,7 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           custom_instructions: |
-            You are implementing Task ${{ steps.prepare-task.outputs.task_number }} of ${{ steps.prepare-task.outputs.total_tasks }} in a SEQUENTIAL task execution system.
+            @claude You are implementing Task ${{ steps.prepare-task.outputs.task_number }} of ${{ steps.prepare-task.outputs.total_tasks }} in a SEQUENTIAL task execution system.
 
             CRITICAL CONTEXT: This task builds on previous tasks' changes. You are currently working on branch ${{ steps.prepare-task.outputs.current_branch }} which was created from ${{ steps.prepare-task.outputs.previous_branch }}.
 

@@ -40,7 +40,7 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           custom_instructions: |
-            Read CLAUDE.md and understand this project's sequential task execution system.
+            @claude Read CLAUDE.md and understand this project's sequential task execution system.
             
             IMPORTANT: This system executes tasks SEQUENTIALLY, not in parallel. Each task will:
             1. Build on the changes from the previous task
