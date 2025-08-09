@@ -1,0 +1,232 @@
+name: Claude Task Implementation
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  issues:
+    types: [opened, assigned]
+
+jobs:
+  claude-implementation:
+    runs-on: ubuntu-latest
+    if: contains(github.event.comment.body, '@claude') || contains(github.event.issue.body, '@claude')
+    
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.WORKFLOW_TRIGGER_TOKEN || github.token }}
+
+      - name: Run Claude Code Action
+        uses: anthropics/claude-code-action@beta
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          trigger_phrase: '@claude'
+          label_trigger: 'claude'
+          branch_prefix: 'claude/'
+          mode: 'tag'
+          use_bedrock: false
+          use_vertex: false
+          timeout_minutes: 30
+          use_sticky_comment: false
+          use_commit_signing: false
+
+      - name: Handle sequential task completion
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          WORKFLOW_TRIGGER_TOKEN: ${{ secrets.WORKFLOW_TRIGGER_TOKEN }}
+        with:
+          github-token: ${{ secrets.WORKFLOW_TRIGGER_TOKEN || github.token }}
+          script: |
+            const path = require('path');
+            const fs = require('fs');
+            
+            try {
+              // Check if this is part of a sequential execution
+              const currentTaskContextFile = 'current-task-context.json';
+              
+              if (!fs.existsSync(currentTaskContextFile)) {
+                console.log('ℹ️ No sequential task context found - this appears to be a standalone Claude Code execution');
+                return;
+              }
+              
+              console.log('🔍 Sequential task context found - handling task completion');
+              
+              const taskContext = JSON.parse(fs.readFileSync(currentTaskContextFile, 'utf8'));
+              console.log(`📋 Processing completion for Task ${taskContext.taskIndex + 1}: ${taskContext.taskData.title}`);
+              
+              // Import the task completion handler
+              const executeSequentialTask = require(path.join(process.cwd(), 'scripts', 'execute-sequential-task.js'));
+              
+              // Handle task completion (PR creation and next task triggering)
+              const result = await executeSequentialTask.handleTaskCompletion({ 
+                github, 
+                context, 
+                core, 
+                taskContext 
+              });
+              
+              if (result.status === 'completed') {
+                console.log(`✅ Task ${taskContext.taskIndex + 1} completed successfully`);
+                console.log(`📝 Created PR #${result.prNumber}`);
+                
+                core.setOutput('pr_number', result.prNumber);
+                core.setOutput('task_status', 'completed');
+                
+              } else if (result.status === 'no-changes') {
+                console.log(`⚠️ Task ${taskContext.taskIndex + 1} completed with no changes needed`);
+                core.setOutput('task_status', 'no-changes');
+                
+              } else if (result.status === 'all_completed') {
+                console.log('🎉 All sequential tasks have been completed!');
+                core.setOutput('task_status', 'all_completed');
+                core.setOutput('total_tasks_completed', result.tasksCompleted);
+              }
+              
+            } catch (error) {
+              console.log('❌ Sequential task completion handling failed:', error.message);
+              console.log('🔍 Full error:', error);
+              
+              // For sequential tasks, we want to mark the task as failed
+              try {
+                if (fs.existsSync('current-task-context.json')) {
+                  const taskContext = JSON.parse(fs.readFileSync('current-task-context.json', 'utf8'));
+                  const { findStateComment } = require('./scripts/setup-sequential-tasks');
+                  
+                  // Load state and mark current task as failed
+                  const stateResult = await findStateComment(github, context.repo.owner, context.repo.repo, taskContext.parentIssue);
+                  if (stateResult) {
+                    const sequentialState = stateResult.state;
+                    const currentTaskIndex = taskContext.taskIndex;
+                    
+                    if (sequentialState.tasks[currentTaskIndex]) {
+                      sequentialState.tasks[currentTaskIndex].status = 'failed';
+                      sequentialState.tasks[currentTaskIndex].error_message = error.message;
+                      sequentialState.tasks[currentTaskIndex].completed_at = new Date().toISOString();
+                      sequentialState.status = 'failed';
+                      sequentialState.updated_at = new Date().toISOString();
+                      
+                      const { createStateCommentBody } = require('./scripts/setup-sequential-tasks');
+                      await github.rest.issues.updateComment({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        comment_id: stateResult.comment_id,
+                        body: createStateCommentBody(sequentialState)
+                      });
+                      
+                      console.log(`❌ Marked Task ${currentTaskIndex + 1} as failed in sequential state`);
+                    }
+                  }
+                }
+              } catch (stateError) {
+                console.log('Failed to update failed state:', stateError.message);
+              }
+              
+              // Don't fail the workflow for non-sequential tasks
+              if (fs.existsSync('current-task-context.json')) {
+                core.setFailed(`Sequential task completion failed: ${error.message}`);
+              } else {
+                console.log('⚠️ Task completion error in non-sequential context - continuing');
+              }
+            }
+
+      - name: Create sequential progress update
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            try {
+              // Only create progress updates for sequential tasks
+              if (!fs.existsSync('current-task-context.json')) {
+                console.log('ℹ️ Skipping progress update - not a sequential task');
+                return;
+              }
+              
+              const taskContext = JSON.parse(fs.readFileSync('current-task-context.json', 'utf8'));
+              const { findStateComment } = require('./scripts/setup-sequential-tasks');
+              
+              console.log(`📊 Creating progress update for sequential Task ${taskContext.taskIndex + 1}`);
+              
+              // Load current state from issue comments
+              const stateResult = await findStateComment(github, context.repo.owner, context.repo.repo, taskContext.parentIssue);
+              
+              if (stateResult) {
+                const sequentialState = stateResult.state;
+                const completedTasks = sequentialState.tasks.filter(t => t.status === 'completed' || t.status === 'no-changes').length;
+                const totalTasks = sequentialState.tasks.length;
+                const currentTaskIndex = sequentialState.current_task_index || 0;
+                const currentTask = sequentialState.tasks[currentTaskIndex];
+                
+                let statusMessage;
+                if (sequentialState.status === 'completed') {
+                  statusMessage = `🎉 **All tasks completed!** Final progress: ${totalTasks}/${totalTasks} tasks finished`;
+                } else if (sequentialState.status === 'failed') {
+                  statusMessage = `❌ **Task failed:** ${currentTask?.title || 'Unknown task'} (Task ${currentTaskIndex + 1})`;
+                } else {
+                  const nextTaskIndex = currentTaskIndex + 1;
+                  if (nextTaskIndex < totalTasks) {
+                    statusMessage = `⚡ **Progress Update:** Task ${currentTaskIndex + 1} completed, Task ${nextTaskIndex + 1} starting next`;
+                  } else {
+                    statusMessage = `✅ **Final Task:** Task ${currentTaskIndex + 1} was the last task`;
+                  }
+                }
+                
+                const progressBars = sequentialState.tasks.map((task, i) => {
+                  const status = task.status;
+                  const icon = status === 'completed' ? '✅' : 
+                             status === 'no-changes' ? '⚠️' : 
+                             status === 'failed' ? '❌' : 
+                             status === 'in-progress' ? '🔄' : '⏳';
+                  const prLink = task.pr_number ? ` ([PR #${task.pr_number}](https://github.com/${context.repo.owner}/${context.repo.repo}/pull/${task.pr_number}))` : '';
+                  return `- ${icon} **Task ${i + 1}**: ${task.title}${prLink}`;
+                }).join('\n');
+                
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: taskContext.parentIssue,
+                  body: [
+                    '## 📊 Sequential Task Progress Update',
+                    '',
+                    statusMessage,
+                    '',
+                    `**Current Status:** ${completedTasks}/${totalTasks} tasks completed`,
+                    '',
+                    '### Task Status:',
+                    '',
+                    progressBars,
+                    '',
+                    '---',
+                    '*Updated automatically by Claude Task Implementation*'
+                  ].join('\n')
+                });
+                
+                console.log('✅ Progress update created');
+              } else {
+                console.log('⚠️ No sequential state found for progress update');
+              }
+            } catch (error) {
+              console.log('Failed to create progress update:', error.message);
+            }
+
+      - name: Upload implementation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-implementation-${{ github.run_id }}-artifacts
+          path: |
+            current-task-context.json
+          retention-days: 30
