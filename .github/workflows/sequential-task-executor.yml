@@ -140,40 +140,6 @@ jobs:
               
             } catch (error) {
               console.log('❌ Task completion handling failed:', error.message);
-              
-              // Try to update task status to failed in state file
-              try {
-                const stateFilePath = '.github/sequential-tasks-state.json';
-                if (fs.existsSync(stateFilePath)) {
-                  const sequentialState = JSON.parse(fs.readFileSync(stateFilePath, 'utf8'));
-                  const currentTaskIndex = sequentialState.current_task_index || 0;
-                  
-                  if (sequentialState.tasks[currentTaskIndex]) {
-                    sequentialState.tasks[currentTaskIndex].status = 'failed';
-                    sequentialState.tasks[currentTaskIndex].error_message = error.message;
-                    sequentialState.tasks[currentTaskIndex].completed_at = new Date().toISOString();
-                    sequentialState.status = 'failed';
-                    sequentialState.updated_at = new Date().toISOString();
-                    
-                    fs.writeFileSync(stateFilePath, JSON.stringify(sequentialState, null, 2));
-                    
-                    // Commit the failed state
-                    const { execSync } = require('child_process');
-                    try {
-                      execSync('git config user.name "Claude Sequential Bot"');
-                      execSync('git config user.email "claude-sequential@anthropic.com"');
-                      execSync(`git add "${stateFilePath}"`);
-                      execSync(`git commit -m "Mark task ${currentTaskIndex + 1} as failed\n\nError: ${error.message}"`);
-                      execSync('git push origin HEAD');
-                    } catch (commitError) {
-                      console.log('Failed to commit error state:', commitError.message);
-                    }
-                  }
-                }
-              } catch (stateError) {
-                console.log('Failed to update error state:', stateError.message);
-              }
-              
               core.setFailed(`Task completion failed: ${error.message}`);
             }
 
@@ -182,15 +148,20 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const fs = require('fs');
-            const stateFilePath = '.github/sequential-tasks-state.json';
+            const { findStateComment } = require('./scripts/setup-sequential-tasks');
             
             try {
-              if (fs.existsSync(stateFilePath)) {
-                const sequentialState = JSON.parse(fs.readFileSync(stateFilePath, 'utf8'));
-                const parentIssue = sequentialState.parent_issue;
+              // Get parent issue from dispatch payload
+              const parentIssue = context.payload.client_payload?.parent_issue;
+              
+              if (parentIssue) {
+                console.log(`📊 Creating progress update for issue #${parentIssue}`);
                 
-                if (parentIssue) {
+                // Load current state from issue comments
+                const stateResult = await findStateComment(github, context.repo.owner, context.repo.repo, parentIssue);
+                
+                if (stateResult) {
+                  const sequentialState = stateResult.state;
                   const completedTasks = sequentialState.tasks.filter(t => t.status === 'completed' || t.status === 'no-changes').length;
                   const totalTasks = sequentialState.tasks.length;
                   const currentTaskIndex = sequentialState.current_task_index || 0;
@@ -239,7 +210,13 @@ jobs:
                       '*Updated automatically by Sequential Task Executor*'
                     ].join('\n')
                   });
+                  
+                  console.log('✅ Progress update created');
+                } else {
+                  console.log('⚠️ No sequential state found for progress update');
                 }
+              } else {
+                console.log('⚠️ No parent issue found for progress update');
               }
             } catch (error) {
               console.log('Failed to create progress update:', error.message);
@@ -252,5 +229,4 @@ jobs:
           name: sequential-task-${{ steps.prepare-task.outputs.task_number || 'unknown' }}-artifacts
           path: |
             current-task-context.json
-            .github/sequential-tasks-state.json
           retention-days: 30
