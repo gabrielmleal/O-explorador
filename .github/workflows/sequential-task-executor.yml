@@ -2,7 +2,24 @@ name: Sequential Task Executor
 
 on:
   repository_dispatch:
-    types: [execute-sequential-task]
+    types: 
+      - execute-sequential-task
+  workflow_dispatch:
+    inputs:
+      task_index:
+        description: 'Task index to execute (0-based)'
+        required: true
+        default: '0'
+        type: string
+      previous_branch:
+        description: 'Previous branch to base from'
+        required: false
+        default: 'main'
+        type: string
+      parent_issue:
+        description: 'Parent issue number'
+        required: true
+        type: string
 
 jobs:
   execute-task:
@@ -34,6 +51,33 @@ jobs:
             const executeSequentialTask = require(path.join(process.cwd(), 'scripts', 'execute-sequential-task.js'));
             
             try {
+              // Debug information
+              console.log('🔍 Workflow Debug Information:');
+              console.log(`   - Event name: ${context.eventName}`);
+              console.log(`   - Action: ${context.payload.action || 'N/A'}`);
+              console.log(`   - Full payload:`, JSON.stringify(context.payload, null, 2));
+              
+              // Handle both repository_dispatch and workflow_dispatch events
+              if (context.eventName === 'repository_dispatch') {
+                console.log('📨 Triggered by repository_dispatch event');
+                console.log(`   - Event type: ${context.payload.action}`);
+                console.log(`   - Client payload:`, context.payload.client_payload);
+              } else if (context.eventName === 'workflow_dispatch') {
+                console.log('🖱️ Triggered by manual workflow_dispatch');
+                console.log(`   - Inputs:`, context.payload.inputs);
+                
+                // For workflow_dispatch, we need to create a mock client_payload from inputs
+                context.payload.client_payload = {
+                  task_index: parseInt(context.payload.inputs.task_index || '0'),
+                  previous_branch: context.payload.inputs.previous_branch || 'main',
+                  parent_issue: parseInt(context.payload.inputs.parent_issue),
+                  trigger_source: 'manual_workflow_dispatch'
+                };
+                console.log('   - Created client_payload from inputs:', context.payload.client_payload);
+              } else {
+                throw new Error(`Unsupported event type: ${context.eventName}. Expected repository_dispatch or workflow_dispatch.`);
+              }
+              
               const taskContext = await executeSequentialTask({ github, context, core });
               
               console.log('📋 Task execution context prepared:');
@@ -53,6 +97,7 @@ jobs:
               
             } catch (error) {
               console.log('❌ Task preparation failed:', error.message);
+              console.log('🔍 Full error details:', error);
               core.setFailed(`Task preparation failed: ${error.message}`);
             }
 
