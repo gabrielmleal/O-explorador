@@ -11,7 +11,10 @@ on:
 jobs:
   claude-implementation:
     runs-on: ubuntu-latest
-    if: contains(github.event.comment.body, '@claude') || contains(github.event.issue.body, '@claude')
+    if: |
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'issues' && contains(github.event.issue.body, '@claude') && !contains(github.event.issue.labels.*.name, 'sequential-context'))
     
     permissions:
       contents: write
@@ -21,6 +24,27 @@ jobs:
       actions: write
     
     steps:
+      - name: Debug workflow trigger
+        uses: actions/github-script@v7
+        with:
+          script: |
+            console.log('🔍 Claude Task Implementation Workflow Triggered');
+            console.log(`   - Event: ${context.eventName}`);
+            console.log(`   - Action: ${context.payload.action || 'N/A'}`);
+            
+            if (context.eventName === 'issues') {
+              console.log(`   - Issue labels: ${JSON.stringify(context.payload.issue.labels.map(l => l.name))}`);
+              console.log(`   - Has sequential-context label: ${context.payload.issue.labels.some(l => l.name === 'sequential-context')}`);
+              console.log(`   - Issue body contains @claude: ${context.payload.issue.body.includes('@claude')}`);
+              
+              if (context.payload.issue.labels.some(l => l.name === 'sequential-context')) {
+                console.log('⚠️ This is a sequential-context issue - task implementation should be handled by sequential workflows');
+              }
+            } else if (context.eventName === 'issue_comment') {
+              console.log(`   - Comment contains @claude: ${context.payload.comment.body.includes('@claude')}`);
+              console.log(`   - Comment created for sequential task execution`);
+            }
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
