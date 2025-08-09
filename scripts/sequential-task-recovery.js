@@ -1,25 +1,141 @@
-const fs = require('fs');
-const path = require('path');
+const { createStateCommentBody, findStateComment } = require('./setup-sequential-tasks');
 
 /**
  * Sequential Task Recovery Utilities
  * Provides functions for handling errors and recovering from failed sequential executions
+ * Updated to use issue-based state management
  */
+
+/**
+ * Reconstruct sequential execution state from existing PRs and issue history
+ * Useful when state comments are missing or corrupted
+ */
+async function reconstructStateFromPRs(github, owner, repo, parentIssue) {
+  console.log('🔍 Attempting to reconstruct state from existing PRs and issues...');
+  
+  try {
+    // Get all PRs with sequential-task label
+    const { data: prs } = await github.rest.pulls.list({
+      owner,
+      repo,
+      state: 'all',
+      sort: 'created',
+      direction: 'asc'
+    });
+    
+    const sequentialPRs = prs.filter(pr => 
+      pr.labels.some(label => label.name === 'sequential-task') ||
+      pr.title.includes('[Sequential]')
+    );
+    
+    if (sequentialPRs.length === 0) {
+      throw new Error('No sequential task PRs found for reconstruction');
+    }
+    
+    console.log(`📋 Found ${sequentialPRs.length} sequential PRs to analyze`);
+    
+    // Extract task information from PRs
+    const reconstructedTasks = [];
+    for (const pr of sequentialPRs) {
+      const taskMatch = pr.title.match(/Task (\d+)(?::|\\s-\\s)(.+)$/);
+      if (taskMatch) {
+        const taskIndex = parseInt(taskMatch[1]) - 1;
+        const taskTitle = taskMatch[2].replace(/^\\[Sequential\\]\\s*/, '');
+        
+        reconstructedTasks[taskIndex] = {
+          id: taskIndex + 1,
+          title: taskTitle,
+          body: pr.body || 'Reconstructed from PR',
+          status: pr.state === 'closed' && pr.merged_at ? 'completed' : 'pending',
+          branch: pr.head.ref,
+          pr_number: pr.number,
+          created_at: pr.created_at,
+          completed_at: pr.merged_at,
+          error_message: null
+        };
+      }
+    }
+    
+    // Fill in any gaps
+    const maxTaskIndex = Math.max(...reconstructedTasks.map((_, i) => i).filter(i => reconstructedTasks[i]));
+    for (let i = 0; i <= maxTaskIndex; i++) {
+      if (!reconstructedTasks[i]) {
+        reconstructedTasks[i] = {
+          id: i + 1,
+          title: `Task ${i + 1} (Reconstructed)`,
+          body: 'Task details not available from reconstruction',
+          status: 'pending',
+          branch: `sequential/task-${i + 1}`,
+          pr_number: null,
+          created_at: new Date().toISOString(),
+          completed_at: null,
+          error_message: null
+        };
+      }
+    }
+    
+    // Determine current task index
+    const currentTaskIndex = reconstructedTasks.findIndex(task => 
+      task.status === 'pending' || task.status === 'failed' || task.status === 'in-progress'
+    );
+    
+    const reconstructedState = {
+      context: 'Reconstructed from existing PRs and issues',
+      parent_issue: parentIssue,
+      tasks: reconstructedTasks.filter(task => task), // Remove empty slots
+      current_task_index: currentTaskIndex >= 0 ? currentTaskIndex : 0,
+      previous_branch: currentTaskIndex > 0 ? reconstructedTasks[currentTaskIndex - 1]?.branch || 'main' : 'main',
+      status: currentTaskIndex >= 0 ? 'in-progress' : 'completed',
+      started_at: reconstructedTasks[0]?.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      workflow_run_id: 'reconstructed'
+    };
+    
+    console.log(`✅ State reconstruction complete: ${reconstructedState.tasks.length} tasks found`);
+    return reconstructedState;
+    
+  } catch (error) {
+    console.log('❌ State reconstruction failed:', error.message);
+    throw error;
+  }
+}
 
 /**
  * Recover from a failed sequential execution
  * Can resume from any task index
  */
-async function recoverSequentialExecution({ github, context, core, resumeFromTaskIndex = null }) {
-  const stateFilePath = '.github/sequential-tasks-state.json';
+async function recoverSequentialExecution({ github, context, core, resumeFromTaskIndex = null, parentIssue = null }) {
+  if (!parentIssue) {
+    throw new Error('Parent issue number required for recovery');
+  }
   
   try {
-    // Load current state
-    if (!fs.existsSync(stateFilePath)) {
-      throw new Error('Sequential tasks state file not found. Cannot recover without state.');
-    }
+    // First try to load existing state from issue comments
+    let sequentialState;
+    let stateCommentId;
     
-    const sequentialState = JSON.parse(fs.readFileSync(stateFilePath, 'utf8'));
+    console.log(`🔍 Looking for sequential state in issue #${parentIssue}`);
+    const stateResult = await findStateComment(github, context.repo.owner, context.repo.repo, parentIssue);
+    
+    if (stateResult) {
+      sequentialState = stateResult.state;
+      stateCommentId = stateResult.comment_id;
+      console.log('✅ Found existing state comment');
+    } else {
+      console.log('⚠️ No state comment found, attempting reconstruction from PRs...');
+      sequentialState = await reconstructStateFromPRs(github, context.repo.owner, context.repo.repo, parentIssue);
+      
+      // Create new state comment with reconstructed state
+      const stateCommentBody = createStateCommentBody(sequentialState);
+      const { data: comment } = await github.rest.issues.createComment({
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+        issue_number: parentIssue,
+        body: stateCommentBody
+      });
+      stateCommentId = comment.id;
+      console.log('✅ Created new state comment with reconstructed data');
+    }
     
     console.log('📊 Current Sequential State:');
     console.log(`   - Status: ${sequentialState.status}`);
@@ -74,33 +190,24 @@ async function recoverSequentialExecution({ github, context, core, resumeFromTas
     sequentialState.status = 'in-progress';
     sequentialState.updated_at = new Date().toISOString();
     
-    // Save updated state
-    fs.writeFileSync(stateFilePath, JSON.stringify(sequentialState, null, 2));
+    // Update state comment
+    try {
+      const stateCommentBody = createStateCommentBody(sequentialState);
+      await github.rest.issues.updateComment({
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+        comment_id: stateCommentId,
+        body: stateCommentBody
+      });
+      console.log('✅ Updated state comment with recovery information');
+    } catch (updateError) {
+      console.log('⚠️ Warning: Failed to update state comment:', updateError.message);
+    }
     
     console.log(`✅ Recovery state prepared:`);
     console.log(`   - Resuming from task: ${resumeTaskIndex + 1}`);
     console.log(`   - Previous branch: ${previousBranch}`);
     console.log(`   - Task status reset: ${resumeTask.title}`);
-    
-    // Commit recovery state
-    try {
-      const { execSync } = require('child_process');
-      execSync('git config user.name "Claude Recovery Bot"');
-      execSync('git config user.email "claude-recovery@anthropic.com"');
-      execSync(`git add "${stateFilePath}"`);
-      execSync(`git commit -m "Recover sequential execution from Task ${resumeTaskIndex + 1}
-
-- Resuming from: ${resumeTask.title}
-- Previous branch: ${previousBranch}
-- Recovery initiated manually
-
-🔄 Sequential Recovery"`);
-      execSync('git push origin HEAD');
-      
-      console.log('📝 Recovery state committed to repository');
-    } catch (commitError) {
-      console.log('⚠️ Warning: Failed to commit recovery state:', commitError.message);
-    }
     
     // Trigger task execution
     const workflowToken = process.env.WORKFLOW_TRIGGER_TOKEN;
@@ -112,6 +219,7 @@ async function recoverSequentialExecution({ github, context, core, resumeFromTas
         client_payload: {
           task_index: resumeTaskIndex,
           previous_branch: previousBranch,
+          parent_issue: parentIssue,
           trigger_source: 'manual_recovery'
         }
       });
@@ -150,9 +258,9 @@ ${sequentialState.tasks.map((task, i) => {
                i === resumeTaskIndex ? '🎯' : '⏳';
   const status = i === resumeTaskIndex ? 'RESUMING' : task.status.toUpperCase();
   return `- ${icon} **Task ${i + 1}**: ${task.title} (${status})`;
-}).join('\n')}
+}).join('\\n')}
 
-${'---'}
+---
 *Sequential execution will continue from the resumed task automatically...*`
       });
     }
@@ -171,17 +279,22 @@ ${'---'}
 }
 
 /**
- * Get detailed status of sequential execution
+ * Get detailed status of sequential execution from issue comments
  */
-function getSequentialStatus() {
-  const stateFilePath = '.github/sequential-tasks-state.json';
-  
-  if (!fs.existsSync(stateFilePath)) {
-    return { status: 'no_sequential_execution', message: 'No sequential tasks state found' };
+async function getSequentialStatus({ github, owner, repo, parentIssue }) {
+  if (!parentIssue) {
+    return { status: 'no_parent_issue', message: 'Parent issue number required' };
   }
   
   try {
-    const sequentialState = JSON.parse(fs.readFileSync(stateFilePath, 'utf8'));
+    console.log(`🔍 Loading sequential status from issue #${parentIssue}`);
+    const stateResult = await findStateComment(github, owner, repo, parentIssue);
+    
+    if (!stateResult) {
+      return { status: 'no_sequential_execution', message: 'No sequential tasks state found in issue comments' };
+    }
+    
+    const sequentialState = stateResult.state;
     
     const taskStatusCounts = sequentialState.tasks.reduce((counts, task) => {
       counts[task.status] = (counts[task.status] || 0) + 1;
@@ -215,59 +328,68 @@ function getSequentialStatus() {
   } catch (error) {
     return { 
       status: 'error', 
-      message: `Failed to parse sequential state: ${error.message}` 
+      message: `Failed to load sequential state: ${error.message}` 
     };
   }
 }
 
 /**
- * Reset sequential execution completely
+ * Reset sequential execution completely by removing state comment
  */
-async function resetSequentialExecution({ github, context, confirmReset = false }) {
+async function resetSequentialExecution({ github, context, parentIssue, confirmReset = false }) {
   if (!confirmReset) {
     throw new Error('Reset not confirmed. Pass confirmReset: true to proceed with reset.');
   }
   
-  const stateFilePath = '.github/sequential-tasks-state.json';
-  
-  if (!fs.existsSync(stateFilePath)) {
-    console.log('ℹ️ No sequential state to reset');
-    return { status: 'no_state_to_reset' };
+  if (!parentIssue) {
+    throw new Error('Parent issue number required for reset');
   }
   
   try {
-    // Load current state for backup
-    const sequentialState = JSON.parse(fs.readFileSync(stateFilePath, 'utf8'));
+    // Find and load current state for backup
+    console.log(`🔍 Looking for sequential state in issue #${parentIssue}`);
+    const stateResult = await findStateComment(github, context.repo.owner, context.repo.repo, parentIssue);
     
-    // Create backup
-    const backupFileName = `sequential-tasks-state-backup-${Date.now()}.json`;
-    fs.writeFileSync(backupFileName, JSON.stringify(sequentialState, null, 2));
+    if (!stateResult) {
+      console.log('ℹ️ No sequential state to reset');
+      return { status: 'no_state_to_reset' };
+    }
     
-    // Remove state file
-    fs.unlinkSync(stateFilePath);
+    const sequentialState = stateResult.state;
+    const stateCommentId = stateResult.comment_id;
+    
+    // Create backup comment with the current state
+    const backupTimestamp = new Date().toISOString();
+    const backupCommentBody = `## 🗄️ Sequential State Backup (${backupTimestamp})
+
+\\`\\`\\`json
+${JSON.stringify(sequentialState, null, 2)}
+\\`\\`\\`
+
+**Backup Details:**
+- Original state comment ID: ${stateCommentId}
+- Tasks backed up: ${sequentialState.tasks.length}
+- Status at backup: ${sequentialState.status}
+- Reset timestamp: ${backupTimestamp}
+
+*This backup was created before resetting sequential execution.*`;
+    
+    await github.rest.issues.createComment({
+      owner: context.repo.owner,
+      repo: context.repo.repo,
+      issue_number: parentIssue,
+      body: backupCommentBody
+    });
+    
+    // Delete the state comment
+    await github.rest.issues.deleteComment({
+      owner: context.repo.owner,
+      repo: context.repo.repo,
+      comment_id: stateCommentId
+    });
     
     console.log('🗑️ Sequential execution state reset');
-    console.log(`📁 Backup saved as: ${backupFileName}`);
-    
-    // Commit reset
-    try {
-      const { execSync } = require('child_process');
-      execSync('git config user.name "Claude Reset Bot"');
-      execSync('git config user.email "claude-reset@anthropic.com"');
-      execSync(`git add "${stateFilePath}" "${backupFileName}"`);
-      execSync(`git commit -m "Reset sequential execution state
-
-- State file removed
-- Backup created: ${backupFileName}
-- Ready for new sequential execution
-
-🗑️ Sequential Reset"`);
-      execSync('git push origin HEAD');
-      
-      console.log('📝 Reset committed to repository');
-    } catch (commitError) {
-      console.log('⚠️ Warning: Failed to commit reset:', commitError.message);
-    }
+    console.log(`📁 Backup saved in issue comment`);
     
     // Create reset comment if parent issue exists
     if (sequentialState.parent_issue) {
@@ -284,16 +406,16 @@ async function resetSequentialExecution({ github, context, confirmReset = false 
 - Completed tasks: ${sequentialState.tasks.filter(t => t.status === 'completed').length}
 - Status: ${sequentialState.status}
 
-**Backup**: State backed up as \`${backupFileName}\`
+**Backup**: State backed up in previous comment
 
-${'---'}
+---
 *You can now start a new sequential execution by providing new context.*`
       });
     }
     
     return { 
       status: 'reset_complete', 
-      backupFile: backupFileName,
+      backupCreated: true,
       totalTasks: sequentialState.tasks.length 
     };
     
@@ -306,5 +428,6 @@ ${'---'}
 module.exports = {
   recoverSequentialExecution,
   getSequentialStatus,
-  resetSequentialExecution
+  resetSequentialExecution,
+  reconstructStateFromPRs
 };

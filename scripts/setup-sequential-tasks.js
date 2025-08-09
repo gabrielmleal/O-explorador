@@ -1,5 +1,44 @@
 const fs = require('fs');
-const path = require('path');
+
+// State management utilities for issue-based storage
+const STATE_COMMENT_PREFIX = '<!-- SEQUENTIAL_TASKS_STATE:';
+const STATE_COMMENT_SUFFIX = ':END_STATE -->';
+
+// Helper function to create state comment body
+function createStateCommentBody(state) {
+  const stateJson = JSON.stringify(state, null, 2);
+  return `${STATE_COMMENT_PREFIX}\n${stateJson}\n${STATE_COMMENT_SUFFIX}\n\n## 🤖 Sequential Tasks State\n\nThis comment contains the execution state for sequential tasks. **Do not modify this comment manually.**\n\n- **Status**: ${state.status}\n- **Current Task**: ${state.current_task_index + 1}/${state.tasks.length}\n- **Started**: ${state.started_at}\n- **Updated**: ${state.updated_at}`;
+}
+
+// Helper function to find and parse state from issue comments
+async function findStateComment(github, owner, repo, issueNumber) {
+  try {
+    const { data: comments } = await github.rest.issues.listComments({
+      owner,
+      repo,
+      issue_number: issueNumber,
+      per_page: 100
+    });
+    
+    for (const comment of comments) {
+      if (comment.body.includes(STATE_COMMENT_PREFIX)) {
+        const startIndex = comment.body.indexOf(STATE_COMMENT_PREFIX) + STATE_COMMENT_PREFIX.length;
+        const endIndex = comment.body.indexOf(STATE_COMMENT_SUFFIX);
+        if (endIndex > startIndex) {
+          const stateJson = comment.body.substring(startIndex, endIndex).trim();
+          return {
+            comment_id: comment.id,
+            state: JSON.parse(stateJson)
+          };
+        }
+      }
+    }
+    return null;
+  } catch (error) {
+    console.log('Error searching for state comment:', error.message);
+    return null;
+  }
+}
 
 module.exports = async ({ github, context }) => {
   const workflowToken = process.env.WORKFLOW_TRIGGER_TOKEN;
@@ -103,22 +142,13 @@ module.exports = async ({ github, context }) => {
     workflow_run_id: context.runId
   };
 
-  // Ensure .github directory exists
-  const githubDir = '.github';
-  if (!fs.existsSync(githubDir)) {
-    fs.mkdirSync(githubDir, { recursive: true });
-  }
-
-  // Write sequential tasks state file
-  const stateFilePath = path.join(githubDir, 'sequential-tasks-state.json');
-  fs.writeFileSync(stateFilePath, JSON.stringify(sequentialState, null, 2));
-
   console.log(`✅ Sequential tasks state created with ${tasks.length} tasks`);
-  console.log(`📁 State file: ${stateFilePath}`);
+  console.log(`📝 State will be stored in issue #${parentIssue} comments`);
 
-  // Create progress tracking comment on parent issue if exists
+  // Create state comment and progress tracking on parent issue
   if (parentIssue) {
     try {
+      // First create the progress tracking comment
       await github.rest.issues.createComment({
         owner: context.repo.owner,
         repo: context.repo.repo,
@@ -139,34 +169,23 @@ ${'---'}
 
 *Sequential execution is now in progress...*`
       });
+
+      // Then create the state comment
+      const stateCommentBody = createStateCommentBody(sequentialState);
+      await github.rest.issues.createComment({
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+        issue_number: parseInt(parentIssue),
+        body: stateCommentBody
+      });
+
+      console.log('✅ Sequential tasks state stored in issue comments');
     } catch (error) {
-      console.log('Failed to create progress comment on parent issue:', error.message);
+      console.log('Failed to create state comment on parent issue:', error.message);
+      throw new Error('Could not store sequential state in issue comments');
     }
-  }
-
-  // Commit and push the state file to repository
-  try {
-    // Configure git
-    const { execSync } = require('child_process');
-    execSync('git config user.name "Claude Sequential Bot"');
-    execSync('git config user.email "claude-sequential@anthropic.com"');
-    
-    // Add, commit and push state file
-    execSync(`git add "${stateFilePath}"`);
-    execSync(`git commit -m "Initialize sequential tasks state
-
-- Created state file for ${tasks.length} sequential tasks
-- Ready to begin task execution chain
-- Parent issue: ${parentIssue ? `#${parentIssue}` : 'none'}
-
-🤖 Generated with Claude Code Sequential Executor"`);
-    
-    execSync('git push origin HEAD');
-    
-    console.log('✅ Sequential tasks state committed and pushed to repository');
-  } catch (error) {
-    console.log('⚠️ Warning: Failed to commit state file to repository:', error.message);
-    console.log('State file created locally but not persisted to repository');
+  } else {
+    throw new Error('Parent issue required for state storage');
   }
 
   // Trigger first task execution using repository dispatch
@@ -196,7 +215,12 @@ ${'---'}
 
   return {
     tasksCount: tasks.length,
-    stateFile: stateFilePath,
+    stateStorage: 'issue-comments',
+    parentIssue: parentIssue,
     firstTaskTriggered: true
   };
 };
+
+// Export utility functions for use by other scripts
+module.exports.createStateCommentBody = createStateCommentBody;
+module.exports.findStateComment = findStateComment;

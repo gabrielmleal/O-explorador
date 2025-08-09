@@ -87,7 +87,8 @@ jobs:
               
               console.log(`✅ Sequential execution setup complete:`);
               console.log(`   - ${result.tasksCount} tasks prepared`);
-              console.log(`   - State file: ${result.stateFile}`);
+              console.log(`   - State storage: ${result.stateStorage}`);
+              console.log(`   - Parent issue: #${result.parentIssue}`);
               console.log(`   - First task triggered: ${result.firstTaskTriggered}`);
               
               core.setOutput('tasks_count', result.tasksCount);
@@ -130,7 +131,6 @@ jobs:
           name: sequential-task-setup
           path: |
             tasks.json
-            .github/sequential-tasks-state.json
             current-task-context.json
           retention-days: 30
 

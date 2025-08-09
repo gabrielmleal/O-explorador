@@ -1,27 +1,66 @@
 const fs = require('fs');
 const { execSync } = require('child_process');
 
-module.exports = async ({ github, context, core }) => {
-  const stateFilePath = '.github/sequential-tasks-state.json';
+// Import state management utilities
+const { createStateCommentBody, findStateComment } = require('./setup-sequential-tasks');
 
-  // Load sequential tasks state
+// Helper function to update state in issue comments
+async function updateStateComment(github, owner, repo, issueNumber, newState, commentId = null) {
+  const stateCommentBody = createStateCommentBody(newState);
+  
+  if (commentId) {
+    // Update existing comment
+    await github.rest.issues.updateComment({
+      owner,
+      repo,
+      comment_id: commentId,
+      body: stateCommentBody
+    });
+  } else {
+    // Create new comment
+    const { data: comment } = await github.rest.issues.createComment({
+      owner,
+      repo,
+      issue_number: issueNumber,
+      body: stateCommentBody
+    });
+    return comment.id;
+  }
+}
+
+module.exports = async ({ github, context, core }) => {
+  // Get task index and parent issue from payload
+  const taskIndex = context.payload.client_payload?.task_index ?? 0;
+  const parentIssue = context.payload.client_payload?.parent_issue;
+  const previousBranch = context.payload.client_payload?.previous_branch ?? 'main';
+  
+  if (!parentIssue) {
+    console.log('❌ Parent issue not provided in dispatch payload');
+    core.setFailed('Parent issue required for state management');
+    return;
+  }
+
+  // Load sequential tasks state from issue comments
   let sequentialState;
+  let stateCommentId;
   try {
-    if (!fs.existsSync(stateFilePath)) {
-      throw new Error('Sequential tasks state file not found. Sequential execution may not be initialized.');
+    console.log(`🔍 Loading sequential tasks state from issue #${parentIssue}`);
+    const stateResult = await findStateComment(github, context.repo.owner, context.repo.repo, parentIssue);
+    
+    if (!stateResult) {
+      throw new Error('Sequential tasks state not found in issue comments. Sequential execution may not be initialized.');
     }
     
-    const stateContent = fs.readFileSync(stateFilePath, 'utf8');
-    sequentialState = JSON.parse(stateContent);
+    sequentialState = stateResult.state;
+    stateCommentId = stateResult.comment_id;
+    
+    console.log(`✅ Loaded state with ${sequentialState.tasks.length} tasks`);
   } catch (error) {
     console.log('❌ Failed to load sequential tasks state:', error.message);
     core.setFailed(`State management error: ${error.message}`);
     return;
   }
 
-  // Get task index from payload or use current index from state
-  const taskIndex = context.payload.client_payload?.task_index ?? sequentialState.current_task_index;
-  const previousBranch = context.payload.client_payload?.previous_branch ?? sequentialState.previous_branch;
   
   console.log(`🎯 Executing sequential task ${taskIndex + 1} of ${sequentialState.tasks.length}`);
   console.log(`📂 Previous branch: ${previousBranch}`);
@@ -33,7 +72,12 @@ module.exports = async ({ github, context, core }) => {
     // Update final state
     sequentialState.status = 'completed';
     sequentialState.updated_at = new Date().toISOString();
-    fs.writeFileSync(stateFilePath, JSON.stringify(sequentialState, null, 2));
+    
+    try {
+      await updateStateComment(github, context.repo.owner, context.repo.repo, parentIssue, sequentialState, stateCommentId);
+    } catch (error) {
+      console.log('Failed to update final state:', error.message);
+    }
     
     // Create completion comment on parent issue
     if (sequentialState.parent_issue) {
@@ -78,7 +122,13 @@ ${'---'}
   sequentialState.current_task_index = taskIndex;
   sequentialState.status = 'in-progress';
   sequentialState.updated_at = new Date().toISOString();
-  fs.writeFileSync(stateFilePath, JSON.stringify(sequentialState, null, 2));
+  
+  try {
+    await updateStateComment(github, context.repo.owner, context.repo.repo, parentIssue, sequentialState, stateCommentId);
+    console.log('✅ Updated task status to in-progress');
+  } catch (error) {
+    console.log('⚠️ Failed to update task status:', error.message);
+  }
 
   // Configure git
   execSync('git config user.name "Claude Sequential Bot"');
@@ -149,15 +199,28 @@ ${'---'}
 };
 
 // Post-implementation function to handle PR creation and next task triggering
-module.exports.handleTaskCompletion = async ({ github, context, taskContext }) => {
+module.exports.handleTaskCompletion = async ({ github, context, core, taskContext }) => {
   const workflowToken = process.env.WORKFLOW_TRIGGER_TOKEN;
-  const stateFilePath = '.github/sequential-tasks-state.json';
   
-  // Load current state
+  // Load current state from issue comments
   let sequentialState;
+  let stateCommentId;
   try {
-    const stateContent = fs.readFileSync(stateFilePath, 'utf8');
-    sequentialState = JSON.parse(stateContent);
+    if (!taskContext.parentIssue) {
+      throw new Error('Parent issue not found in task context');
+    }
+    
+    console.log(`🔍 Loading current sequential tasks state from issue #${taskContext.parentIssue}`);
+    const stateResult = await findStateComment(github, context.repo.owner, context.repo.repo, taskContext.parentIssue);
+    
+    if (!stateResult) {
+      throw new Error('Sequential tasks state not found in issue comments');
+    }
+    
+    sequentialState = stateResult.state;
+    stateCommentId = stateResult.comment_id;
+    
+    console.log(`✅ Loaded state for completion handling`);
   } catch (error) {
     throw new Error(`Failed to load sequential state: ${error.message}`);
   }
@@ -173,12 +236,17 @@ module.exports.handleTaskCompletion = async ({ github, context, taskContext }) =
     sequentialState.tasks[taskIndex].status = 'no-changes';
     sequentialState.tasks[taskIndex].completed_at = new Date().toISOString();
     sequentialState.updated_at = new Date().toISOString();
-    fs.writeFileSync(stateFilePath, JSON.stringify(sequentialState, null, 2));
+    
+    try {
+      await updateStateComment(github, context.repo.owner, context.repo.repo, taskContext.parentIssue, sequentialState, stateCommentId);
+    } catch (error) {
+      console.log('Failed to update no-changes state:', error.message);
+    }
     
     // Still trigger next task
     const nextTaskIndex = taskIndex + 1;
     if (nextTaskIndex < sequentialState.tasks.length) {
-      await triggerNextTask(github, context, nextTaskIndex, currentBranch, workflowToken);
+      await triggerNextTask(github, context, nextTaskIndex, currentBranch, workflowToken, taskContext.parentIssue);
     }
     
     return { status: 'no-changes', prNumber: null };
@@ -264,15 +332,23 @@ ${sequentialState.parent_issue ? `\nRelated to: #${sequentialState.parent_issue}
     const nextTaskIndex = taskIndex + 1;
     if (nextTaskIndex < sequentialState.tasks.length) {
       // Save state before triggering next task
-      fs.writeFileSync(stateFilePath, JSON.stringify(sequentialState, null, 2));
+      try {
+        await updateStateComment(github, context.repo.owner, context.repo.repo, taskContext.parentIssue, sequentialState, stateCommentId);
+      } catch (error) {
+        console.log('Failed to update completed state:', error.message);
+      }
       
-      await triggerNextTask(github, context, nextTaskIndex, currentBranch, workflowToken);
+      await triggerNextTask(github, context, nextTaskIndex, currentBranch, workflowToken, taskContext.parentIssue);
       
       console.log(`🚀 Triggered next sequential task: ${nextTaskIndex + 1}`);
     } else {
       // All tasks completed
       sequentialState.status = 'completed';
-      fs.writeFileSync(stateFilePath, JSON.stringify(sequentialState, null, 2));
+      try {
+        await updateStateComment(github, context.repo.owner, context.repo.repo, taskContext.parentIssue, sequentialState, stateCommentId);
+      } catch (error) {
+        console.log('Failed to update final completed state:', error.message);
+      }
       
       console.log('🎉 All sequential tasks completed!');
     }
@@ -286,14 +362,19 @@ ${sequentialState.parent_issue ? `\nRelated to: #${sequentialState.parent_issue}
     sequentialState.tasks[taskIndex].completed_at = new Date().toISOString();
     sequentialState.status = 'failed';
     sequentialState.updated_at = new Date().toISOString();
-    fs.writeFileSync(stateFilePath, JSON.stringify(sequentialState, null, 2));
+    
+    try {
+      await updateStateComment(github, context.repo.owner, context.repo.repo, taskContext.parentIssue, sequentialState, stateCommentId);
+    } catch (stateError) {
+      console.log('Failed to update failed state:', stateError.message);
+    }
     
     throw error;
   }
 };
 
 // Helper function to trigger next task
-async function triggerNextTask(github, context, nextTaskIndex, previousBranch, workflowToken) {
+async function triggerNextTask(github, context, nextTaskIndex, previousBranch, workflowToken, parentIssue) {
   if (!workflowToken) {
     throw new Error('WORKFLOW_TRIGGER_TOKEN required to trigger next task');
   }
@@ -306,6 +387,7 @@ async function triggerNextTask(github, context, nextTaskIndex, previousBranch, w
       client_payload: {
         task_index: nextTaskIndex,
         previous_branch: previousBranch,
+        parent_issue: parentIssue,
         trigger_source: 'sequential_task_completion'
       }
     });
