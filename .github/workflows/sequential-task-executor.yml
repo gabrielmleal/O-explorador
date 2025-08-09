@@ -1,0 +1,255 @@
+name: Sequential Task Executor
+
+on:
+  repository_dispatch:
+    types: [execute-sequential-task]
+
+jobs:
+  execute-task:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.WORKFLOW_TRIGGER_TOKEN || github.token }}
+
+      - name: Prepare task execution environment
+        id: prepare-task
+        uses: actions/github-script@v7
+        env:
+          WORKFLOW_TRIGGER_TOKEN: ${{ secrets.WORKFLOW_TRIGGER_TOKEN }}
+        with:
+          github-token: ${{ secrets.WORKFLOW_TRIGGER_TOKEN || github.token }}
+          script: |
+            const path = require('path');
+            const executeSequentialTask = require(path.join(process.cwd(), 'scripts', 'execute-sequential-task.js'));
+            
+            try {
+              const taskContext = await executeSequentialTask({ github, context, core });
+              
+              console.log('📋 Task execution context prepared:');
+              console.log(`   - Task: ${taskContext.taskData.title}`);
+              console.log(`   - Index: ${taskContext.taskIndex + 1}/${taskContext.totalTasks}`);
+              console.log(`   - Branch: ${taskContext.currentBranch}`);
+              console.log(`   - Base: ${taskContext.previousBranch}`);
+              
+              // Set outputs for next steps
+              core.setOutput('task_title', taskContext.taskData.title);
+              core.setOutput('task_index', taskContext.taskIndex);
+              core.setOutput('total_tasks', taskContext.totalTasks);
+              core.setOutput('current_branch', taskContext.currentBranch);
+              core.setOutput('previous_branch', taskContext.previousBranch);
+              core.setOutput('task_prepared', 'true');
+              
+            } catch (error) {
+              console.log('❌ Task preparation failed:', error.message);
+              core.setFailed(`Task preparation failed: ${error.message}`);
+            }
+
+      - name: Implement task with Claude Code
+        if: steps.prepare-task.outputs.task_prepared == 'true'
+        uses: anthropics/claude-code-action@beta
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          custom_instructions: |
+            You are implementing Task ${{ steps.prepare-task.outputs.task_index + 1 }} of ${{ steps.prepare-task.outputs.total_tasks }} in a SEQUENTIAL task execution system.
+
+            CRITICAL CONTEXT: This task builds on previous tasks' changes. You are currently working on branch ${{ steps.prepare-task.outputs.current_branch }} which was created from ${{ steps.prepare-task.outputs.previous_branch }}.
+
+            Read current-task-context.json for complete context including:
+            - Current task details  
+            - Previous tasks that have been completed
+            - Sequential execution context
+            - Changes from previous tasks are already in your working directory
+
+            TASK TO IMPLEMENT:
+            **${{ steps.prepare-task.outputs.task_title }}**
+
+            INSTRUCTIONS:
+            1. Read CLAUDE.md for project guidelines
+            2. Read current-task-context.json for full sequential context
+            3. Examine existing code to understand previous tasks' implementations
+            4. Implement this specific task building on existing changes
+            5. Follow project conventions and best practices
+            6. Create/modify all necessary files for this task
+            7. Ensure code is production-ready with proper error handling
+            8. Write tests if the project has testing infrastructure
+            
+            IMPORTANT: 
+            - You're working with cumulative changes from previous tasks
+            - Focus only on implementing this specific task
+            - Build upon and integrate with existing code from previous tasks
+            - Do not redo work from previous tasks unless necessary for integration
+            - Your changes will be reviewed as part of a stacked PR system
+
+      - name: Handle task completion
+        if: steps.prepare-task.outputs.task_prepared == 'true'
+        uses: actions/github-script@v7
+        env:
+          WORKFLOW_TRIGGER_TOKEN: ${{ secrets.WORKFLOW_TRIGGER_TOKEN }}
+        with:
+          github-token: ${{ secrets.WORKFLOW_TRIGGER_TOKEN || github.token }}
+          script: |
+            const path = require('path');
+            const fs = require('fs');
+            const executeSequentialTask = require(path.join(process.cwd(), 'scripts', 'execute-sequential-task.js'));
+            
+            try {
+              // Load task context
+              const taskContextFile = 'current-task-context.json';
+              if (!fs.existsSync(taskContextFile)) {
+                throw new Error('Task context file not found');
+              }
+              
+              const taskContext = JSON.parse(fs.readFileSync(taskContextFile, 'utf8'));
+              
+              // Handle task completion (PR creation and next task triggering)
+              const result = await executeSequentialTask.handleTaskCompletion({ 
+                github, 
+                context, 
+                core, 
+                taskContext 
+              });
+              
+              if (result.status === 'completed') {
+                console.log(`✅ Task ${taskContext.taskIndex + 1} completed successfully`);
+                console.log(`📝 Created PR #${result.prNumber}`);
+                
+                core.setOutput('pr_number', result.prNumber);
+                core.setOutput('task_status', 'completed');
+                
+              } else if (result.status === 'no-changes') {
+                console.log(`⚠️ Task ${taskContext.taskIndex + 1} completed with no changes needed`);
+                core.setOutput('task_status', 'no-changes');
+                
+              } else if (result.status === 'all_completed') {
+                console.log('🎉 All sequential tasks have been completed!');
+                core.setOutput('task_status', 'all_completed');
+                core.setOutput('total_tasks_completed', result.tasksCompleted);
+              }
+              
+            } catch (error) {
+              console.log('❌ Task completion handling failed:', error.message);
+              
+              // Try to update task status to failed in state file
+              try {
+                const stateFilePath = '.github/sequential-tasks-state.json';
+                if (fs.existsSync(stateFilePath)) {
+                  const sequentialState = JSON.parse(fs.readFileSync(stateFilePath, 'utf8'));
+                  const currentTaskIndex = sequentialState.current_task_index || 0;
+                  
+                  if (sequentialState.tasks[currentTaskIndex]) {
+                    sequentialState.tasks[currentTaskIndex].status = 'failed';
+                    sequentialState.tasks[currentTaskIndex].error_message = error.message;
+                    sequentialState.tasks[currentTaskIndex].completed_at = new Date().toISOString();
+                    sequentialState.status = 'failed';
+                    sequentialState.updated_at = new Date().toISOString();
+                    
+                    fs.writeFileSync(stateFilePath, JSON.stringify(sequentialState, null, 2));
+                    
+                    // Commit the failed state
+                    const { execSync } = require('child_process');
+                    try {
+                      execSync('git config user.name "Claude Sequential Bot"');
+                      execSync('git config user.email "claude-sequential@anthropic.com"');
+                      execSync(`git add "${stateFilePath}"`);
+                      execSync(`git commit -m "Mark task ${currentTaskIndex + 1} as failed\n\nError: ${error.message}"`);
+                      execSync('git push origin HEAD');
+                    } catch (commitError) {
+                      console.log('Failed to commit error state:', commitError.message);
+                    }
+                  }
+                }
+              } catch (stateError) {
+                console.log('Failed to update error state:', stateError.message);
+              }
+              
+              core.setFailed(`Task completion failed: ${error.message}`);
+            }
+
+      - name: Create progress update
+        if: always() && steps.prepare-task.outputs.task_prepared == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const stateFilePath = '.github/sequential-tasks-state.json';
+            
+            try {
+              if (fs.existsSync(stateFilePath)) {
+                const sequentialState = JSON.parse(fs.readFileSync(stateFilePath, 'utf8'));
+                const parentIssue = sequentialState.parent_issue;
+                
+                if (parentIssue) {
+                  const completedTasks = sequentialState.tasks.filter(t => t.status === 'completed' || t.status === 'no-changes').length;
+                  const totalTasks = sequentialState.tasks.length;
+                  const currentTaskIndex = sequentialState.current_task_index || 0;
+                  const currentTask = sequentialState.tasks[currentTaskIndex];
+                  
+                  let statusMessage;
+                  if (sequentialState.status === 'completed') {
+                    statusMessage = `🎉 **All tasks completed!** Final progress: ${totalTasks}/${totalTasks} tasks finished`;
+                  } else if (sequentialState.status === 'failed') {
+                    statusMessage = `❌ **Task failed:** ${currentTask?.title || 'Unknown task'} (Task ${currentTaskIndex + 1})`;
+                  } else {
+                    const nextTaskIndex = currentTaskIndex + 1;
+                    if (nextTaskIndex < totalTasks) {
+                      statusMessage = `⚡ **Progress Update:** Task ${currentTaskIndex + 1} completed, Task ${nextTaskIndex + 1} starting next`;
+                    } else {
+                      statusMessage = `✅ **Final Task:** Task ${currentTaskIndex + 1} was the last task`;
+                    }
+                  }
+                  
+                  const progressBars = sequentialState.tasks.map((task, i) => {
+                    const status = task.status;
+                    const icon = status === 'completed' ? '✅' : 
+                               status === 'no-changes' ? '⚠️' : 
+                               status === 'failed' ? '❌' : 
+                               status === 'in-progress' ? '🔄' : '⏳';
+                    const prLink = task.pr_number ? ` ([PR #${task.pr_number}](https://github.com/${context.repo.owner}/${context.repo.repo}/pull/${task.pr_number}))` : '';
+                    return `- ${icon} **Task ${i + 1}**: ${task.title}${prLink}`;
+                  }).join('\n');
+                  
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: parentIssue,
+                    body: [
+                      '## 📊 Sequential Task Progress Update',
+                      '',
+                      statusMessage,
+                      '',
+                      `**Current Status:** ${completedTasks}/${totalTasks} tasks completed`,
+                      '',
+                      '### Task Status:',
+                      '',
+                      progressBars,
+                      '',
+                      '---',
+                      '*Updated automatically by Sequential Task Executor*'
+                    ].join('\n')
+                  });
+                }
+              }
+            } catch (error) {
+              console.log('Failed to create progress update:', error.message);
+            }
+
+      - name: Upload task artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sequential-task-${{ steps.prepare-task.outputs.task_index || 'unknown' }}-artifacts
+          path: |
+            current-task-context.json
+            .github/sequential-tasks-state.json
+          retention-days: 30

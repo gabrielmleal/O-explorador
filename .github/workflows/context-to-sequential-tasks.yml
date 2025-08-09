@@ -1,0 +1,175 @@
+name: Context to Sequential Tasks
+
+on:
+  workflow_dispatch:
+    inputs:
+      context:
+        description: 'Project context or requirements to decompose into sequential tasks'
+        required: true
+        type: string
+      max_tasks:
+        description: 'Maximum number of tasks to create'
+        required: false
+        default: '10'
+        type: string
+  issues:
+    types: [opened, edited]
+
+jobs:
+  setup-sequential-execution:
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' || 
+      (github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'sequential-context'))
+    
+    permissions:
+      contents: write
+      issues: write
+      id-token: write
+      actions: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.WORKFLOW_TRIGGER_TOKEN || github.token }}
+
+      - name: Analyze context with Claude Code
+        uses: anthropics/claude-code-action@beta
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          custom_instructions: |
+            Read CLAUDE.md and understand this project's sequential task execution system.
+            
+            IMPORTANT: This system executes tasks SEQUENTIALLY, not in parallel. Each task will:
+            1. Build on the changes from the previous task
+            2. Create a PR that stacks on the previous task's branch
+            3. Automatically trigger the next task when complete
+            
+            Break down this context into sequential, dependent tasks:
+            
+            ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.context || github.event.issue.body }}
+            
+            Create tasks.json with this structure:
+            {
+              "tasks": [
+                {
+                  "title": "Clear, specific task title",
+                  "body": "Detailed task description that considers it will build on previous tasks' changes"
+                }
+              ]
+            }
+            
+            Guidelines for sequential tasks:
+            - Each task should logically build on the previous ones
+            - Later tasks can reference and use changes from earlier tasks
+            - Tasks should be atomic but aware of the cumulative context
+            - Consider dependencies and logical ordering
+            - Include context about what each task expects from previous tasks
+            
+            Max tasks: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.max_tasks || '10' }}
+
+      - name: Setup sequential task execution
+        id: setup-sequential
+        uses: actions/github-script@v7
+        env:
+          PARENT_ISSUE_NUMBER: ${{ github.event.issue.number }}
+          WORKFLOW_TRIGGER_TOKEN: ${{ secrets.WORKFLOW_TRIGGER_TOKEN }}
+        with:
+          github-token: ${{ secrets.WORKFLOW_TRIGGER_TOKEN || github.token }}
+          script: |
+            const path = require('path');
+            const setupSequentialTasks = require(path.join(process.cwd(), 'scripts', 'setup-sequential-tasks.js'));
+            
+            try {
+              const result = await setupSequentialTasks({ github, context, core });
+              
+              console.log(`✅ Sequential execution setup complete:`);
+              console.log(`   - ${result.tasksCount} tasks prepared`);
+              console.log(`   - State file: ${result.stateFile}`);
+              console.log(`   - First task triggered: ${result.firstTaskTriggered}`);
+              
+              core.setOutput('tasks_count', result.tasksCount);
+              core.setOutput('first_task_triggered', result.firstTaskTriggered);
+              
+            } catch (error) {
+              console.log('❌ Sequential setup failed:', error.message);
+              
+              // Create error comment on parent issue if it exists
+              const parentIssue = process.env.PARENT_ISSUE_NUMBER;
+              if (parentIssue) {
+                try {
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: parseInt(parentIssue),
+                    body: `❌ **Sequential Task Setup Failed**
+            
+            Error: ${error.message}
+            
+            Please check the context input and try again. Make sure:
+            - Context is clear and well-defined
+            - Claude Code OAuth token is properly configured
+            - Repository has necessary permissions for sequential execution
+            
+            You can retry by re-running this workflow or creating a new issue with the \`sequential-context\` label.`
+                  });
+                } catch (commentError) {
+                  console.log('Failed to create error comment:', commentError.message);
+                }
+              }
+              
+              core.setFailed(`Sequential setup failed: ${error.message}`);
+            }
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sequential-task-setup
+          path: |
+            tasks.json
+            .github/sequential-tasks-state.json
+            current-task-context.json
+          retention-days: 30
+
+      - name: Create progress summary
+        if: steps.setup-sequential.outputs.tasks_count > 0
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tasksCount = '${{ steps.setup-sequential.outputs.tasks_count }}';
+            const parentIssue = process.env.PARENT_ISSUE_NUMBER || context.payload.issue?.number;
+            
+            if (parentIssue) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: parseInt(parentIssue),
+                body: `## ⚡ Sequential Task Execution In Progress
+            
+            🎯 **Setup Complete**: ${tasksCount} tasks created and ready for sequential execution
+            🚀 **Status**: Task 1 is now executing
+            📊 **Progress**: 1/${tasksCount} tasks started
+            
+            ### How Sequential Execution Works:
+            
+            1. **Sequential Processing**: Tasks execute one at a time, in order
+            2. **Progressive Building**: Each task builds on changes from previous tasks  
+            3. **Stacked PRs**: Each task creates a PR that includes its changes only
+            4. **Automatic Chaining**: Next task triggers automatically when current completes
+            5. **Full Context**: Later tasks have access to all previous implementations
+            
+            ### Monitor Progress:
+            
+            - Watch for PR creation notifications
+            - Each PR will be labeled with \`sequential-task\` and \`task-N\`
+            - Progress updates will be posted here automatically
+            - Final completion summary will be posted when all tasks finish
+            
+            *Sequential execution is now running automatically...*`
+              });
+            } else {
+              console.log(\`✅ Sequential execution setup complete with \${tasksCount} tasks\`);
+            }

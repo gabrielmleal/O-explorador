@@ -16,9 +16,25 @@ task_decomposition:
   # Task size preferences
   preferred_task_size: "medium"  # small, medium, large
   
-  # Allow task parallelization
-  enable_parallel_tasks: true
-  max_parallel_tasks: 5
+  # Sequential execution mode (replaces parallelization)
+  enable_sequential_execution: true
+  sequential_execution_mode: true
+  
+  # Sequential execution settings
+  sequential_settings:
+    # Branch naming for sequential tasks
+    branch_prefix: "sequential"
+    branch_format: "sequential/task-{task_index}"
+    
+    # State management
+    state_file_path: ".github/sequential-tasks-state.json"
+    preserve_state_on_failure: true
+    enable_state_recovery: true
+    
+    # Task chaining
+    auto_trigger_next_task: true
+    task_completion_delay_seconds: 2
+    max_chain_length: 20
 
 # Issue Creation Settings
 issue_creation:
@@ -61,17 +77,34 @@ issue_creation:
 
 # PR Creation Settings
 pr_creation:
-  # Branch naming
+  # Branch naming (for non-sequential PRs)
   branch_prefix: "claude"
   branch_format: "claude/issue-{issue_number}-{task_slug}"
   max_branch_length: 63
+  
+  # Sequential PR settings
+  sequential_pr_settings:
+    # Sequential PR labels
+    sequential_labels:
+      - "claude-generated"
+      - "sequential-task"
+      - "needs-review"
+    
+    # PR stacking configuration
+    enable_stacked_prs: true
+    base_branch_strategy: "previous_task" # previous_task or main
+    include_previous_changes_context: true
+    
+    # PR naming for sequential tasks
+    sequential_title_format: "[Sequential] Task {task_index}: {task_title}"
+    include_sequence_info: true
   
   # PR settings
   create_draft: false
   auto_merge: false
   delete_branch_on_merge: true
   
-  # PR labels
+  # PR labels (for non-sequential PRs)
   default_labels:
     - "claude-generated"
     - "needs-review"
@@ -141,15 +174,28 @@ github:
 
 # Workflow Triggers
 triggers:
-  # Context input trigger
+  # Context input trigger (traditional parallel mode)
   context_input:
-    enabled: true
+    enabled: false  # Disabled in favor of sequential execution
     label: "context-input"
     process_edits: true
   
-  # Auto-implement trigger
-  auto_implement:
+  # Sequential context trigger (new)
+  sequential_context:
     enabled: true
+    label: "sequential-context"
+    process_edits: true
+    workflow_file: "context-to-sequential-tasks.yml"
+  
+  # Sequential task execution trigger
+  sequential_task_execution:
+    enabled: true
+    event_type: "execute-sequential-task"
+    workflow_file: "sequential-task-executor.yml"
+  
+  # Auto-implement trigger (legacy, disabled for sequential)
+  auto_implement:
+    enabled: false  # Not needed in sequential mode
     label: "auto-implement"
     ignore_labels: ["in-progress", "blocked"]
   
@@ -200,9 +246,9 @@ security:
 
 # Performance Settings
 performance:
-  # Parallelization
-  max_parallel_workflows: 5
-  max_parallel_api_calls: 3
+  # Sequential execution (replaces parallelization)
+  max_sequential_workflows: 1  # Only one sequential chain at a time
+  max_parallel_api_calls: 3    # API calls within a single workflow can still be parallel
   
   # Timeouts (in seconds)
   workflow_timeout: 3600  # 1 hour
