@@ -3,15 +3,6 @@ const fs = require('fs');
 module.exports = async ({ github, context, core }) => {
   // Set up GitHub client with workflow token for comments
   const workflowToken = process.env.WORKFLOW_TRIGGER_TOKEN;
-  let commentGithub = github;
-  
-  if (workflowToken) {
-    const { Octokit } = require('@octokit/rest');
-    commentGithub = new Octokit({
-      auth: workflowToken,
-      baseUrl: 'https://api.github.com'
-    });
-  }
 
   // Check if tasks.json exists
   if (!fs.existsSync('tasks.json')) {
@@ -19,7 +10,7 @@ module.exports = async ({ github, context, core }) => {
     
     const parentIssue = process.env.PARENT_ISSUE_NUMBER || context.payload.issue?.number;
     if (parentIssue) {
-      await commentGithub.rest.issues.createComment({
+      await github.rest.issues.createComment({
         owner: context.repo.owner,
         repo: context.repo.repo,
         issue_number: parseInt(parentIssue),
@@ -40,7 +31,7 @@ module.exports = async ({ github, context, core }) => {
     
     const parentIssue = process.env.PARENT_ISSUE_NUMBER || context.payload.issue?.number;
     if (parentIssue) {
-      await commentGithub.rest.issues.createComment({
+      await github.rest.issues.createComment({
         owner: context.repo.owner,
         repo: context.repo.repo,
         issue_number: parseInt(parentIssue),
@@ -84,7 +75,7 @@ module.exports = async ({ github, context, core }) => {
 
   // Create task progress tracking comment first using workflow token
   
-  const progressComment = await commentGithub.rest.issues.createComment({
+  const progressComment = await github.rest.issues.createComment({
     owner: context.repo.owner,
     repo: context.repo.repo,
     issue_number: parseInt(parentIssue),
@@ -110,7 +101,7 @@ ${'---'}
     };
     
     try {
-      const comment = await commentGithub.rest.issues.createComment({
+      const comment = await github.rest.issues.createComment({
         owner: context.repo.owner,
         repo: context.repo.repo,
         issue_number: parseInt(parentIssue),
@@ -122,7 +113,7 @@ ${'---'}
       // Trigger task implementation workflow via repository dispatch
       try {        
         if (workflowToken) {
-          await commentGithub.rest.repos.createDispatchEvent({
+          await github.rest.repos.createDispatchEvent({
             owner: context.repo.owner,
             repo: context.repo.repo,
             event_type: 'implement-task',
