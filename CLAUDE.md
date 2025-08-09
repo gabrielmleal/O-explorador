@@ -1,23 +1,36 @@
 # Claude Code Project Guidelines
 
 ## Project Overview
-This is an automated workflow system that uses Claude Code to decompose requirements into tasks, create GitHub issues, and automatically generate pull requests for implementation.
+This is an automated sequential workflow system that uses Claude Code to decompose requirements into sequential tasks and automatically generate stacked pull requests for implementation. Each task builds on the changes from previous tasks, creating a progressive implementation chain.
 
 ## Architecture
 
 ### Core Components
 1. **GitHub Workflows** (`.github/workflows/`)
-   - `context-to-tasks.yml`: Main orchestrator using Claude Code action for task decomposition
-   - `issue-to-pr.yml`: Automatic PR creation from issues using Claude Code CLI
+   - `context-to-sequential-tasks.yml`: Sequential task decomposition and initialization
+   - `sequential-task-executor.yml`: Individual task execution with automatic chaining
+   - `sequential-task-recovery.yml`: Error recovery and state management
    - `claude-pr.yml`: Interactive PR assistant
 
-2. **Configuration** (`config/`)
-   - `workflow-config.yml`: Workflow settings and parameters
+2. **Scripts** (`scripts/`)
+   - `setup-sequential-tasks.js`: Task decomposition and state initialization
+   - `execute-sequential-task.js`: Task execution, PR creation, and chaining logic
+   - `sequential-task-recovery.js`: Error recovery and state management utilities
 
-3. **Integration Approach**
-   - Uses `anthropics/claude-code-action@beta` for task decomposition
-   - Uses `claude-code` CLI for issue implementation
-   - Inline JavaScript in GitHub Actions for issue creation and workflow orchestration
+3. **Configuration** (`config/`)
+   - `workflow-config.yml`: Sequential execution settings and parameters
+
+4. **State Management**
+   - `.github/sequential-tasks-state.json`: Persistent state tracking for task chains
+   - Automatic state backup and recovery capabilities
+   - Progress tracking and error handling
+
+5. **Sequential Integration Approach**
+   - Uses `anthropics/claude-code-action@beta` for task decomposition and implementation
+   - State-driven sequential execution with automatic task chaining
+   - Creates stacked PRs where each task builds on previous task's branch
+   - Automatic task triggering via `repository_dispatch` events
+   - Comprehensive error recovery and resume capabilities
 
 ## Development Guidelines
 
@@ -160,7 +173,7 @@ This is an automated workflow system that uses Claude Code to decompose requirem
 1. Break down complex requirements systematically
 2. Prioritize tasks based on dependencies
 3. Group related tasks together
-4. Identify parallel execution opportunities
+4. Plan sequential task dependencies and execution order
 
 ### Issue Management
 1. Use consistent labeling scheme

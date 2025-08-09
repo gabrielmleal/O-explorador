@@ -1,5 +1,5 @@
-# Claude Workflow Configuration
-# This file contains configuration settings for the automated workflow system
+# Sequential Task Execution Configuration
+# Configuration settings for the automated sequential workflow system
 
 # Task Decomposition Settings
 task_decomposition:
@@ -16,65 +16,45 @@ task_decomposition:
   # Task size preferences
   preferred_task_size: "medium"  # small, medium, large
   
-  # Allow task parallelization
-  enable_parallel_tasks: true
-  max_parallel_tasks: 5
+  # Sequential execution settings
+  sequential_settings:
+    # Branch naming for sequential tasks
+    branch_prefix: "sequential"
+    branch_format: "sequential/task-{task_index}"
+    
+    # State management
+    state_file_path: ".github/sequential-tasks-state.json"
+    preserve_state_on_failure: true
+    enable_state_recovery: true
+    
+    # Task chaining
+    auto_trigger_next_task: true
+    task_completion_delay_seconds: 2
+    max_chain_length: 20
 
-# Issue Creation Settings
-issue_creation:
-  # Labels to automatically apply
-  default_labels:
-    - "auto-generated"
-    - "claude-task"
-  
-  # Label mapping for task properties
-  complexity_labels:
-    low: "complexity:low"
-    medium: "complexity:medium"
-    high: "complexity:high"
-  
-  type_labels:
-    feature: "enhancement"
-    bugfix: "bug"
-    refactor: "refactor"
-    test: "testing"
-    docs: "documentation"
-    chore: "chore"
-  
-  priority_labels:
-    1: "priority:critical"
-    2: "priority:high"
-    3: "priority:medium"
-    4: "priority:low"
-  
-  # Auto-implementation settings
-  auto_implement:
-    enabled: true
-    label: "auto-implement"
-    delay_seconds: 5  # Delay before triggering implementation
-  
-  # Issue template settings
-  include_metadata: true
-  include_dependencies: true
-  include_success_criteria: true
-  include_risks: true
-
-# PR Creation Settings
+# Sequential PR Settings
 pr_creation:
-  # Branch naming
-  branch_prefix: "claude"
-  branch_format: "claude/issue-{issue_number}-{task_slug}"
-  max_branch_length: 63
+  # Sequential PR configuration
+  sequential_pr_settings:
+    # Sequential PR labels
+    labels:
+      - "claude-generated"
+      - "sequential-task"
+      - "needs-review"
+    
+    # PR stacking configuration
+    enable_stacked_prs: true
+    base_branch_strategy: "previous_task" # previous_task or main
+    include_previous_changes_context: true
+    
+    # PR naming for sequential tasks
+    title_format: "[Sequential] Task {task_number}: {task_title}"
+    include_sequence_info: true
   
   # PR settings
   create_draft: false
   auto_merge: false
   delete_branch_on_merge: true
-  
-  # PR labels
-  default_labels:
-    - "claude-generated"
-    - "needs-review"
   
   # Review settings
   request_reviews: true
@@ -89,7 +69,7 @@ pr_creation:
 # Claude Code Settings
 claude:
   # Model settings
-  model: "claude-sonnet-4-20250514"  # Using Claude Sonnet 4
+  model: "claude-sonnet-4-20250514"
   max_tokens: 4096
   temperature: 0.7
   
@@ -127,10 +107,6 @@ github:
   respect_rate_limits: true
   rate_limit_delay_ms: 1000
   
-  # Issue settings
-  close_on_merge: true
-  lock_closed_issues: false
-  
   # PR settings
   squash_merge: true
   merge_commit_title: "conventional"  # conventional, pr_title, custom
@@ -141,17 +117,18 @@ github:
 
 # Workflow Triggers
 triggers:
-  # Context input trigger
-  context_input:
+  # Sequential context trigger
+  sequential_context:
     enabled: true
-    label: "context-input"
+    label: "sequential-context"
     process_edits: true
+    workflow_file: "context-to-sequential-tasks.yml"
   
-  # Auto-implement trigger
-  auto_implement:
+  # Sequential task execution trigger
+  sequential_task_execution:
     enabled: true
-    label: "auto-implement"
-    ignore_labels: ["in-progress", "blocked"]
+    event_type: "execute-sequential-task"
+    workflow_file: "sequential-task-executor.yml"
   
   # PR assistant trigger
   pr_assistant:
@@ -200,9 +177,9 @@ security:
 
 # Performance Settings
 performance:
-  # Parallelization
-  max_parallel_workflows: 5
-  max_parallel_api_calls: 3
+  # Sequential execution limits
+  max_sequential_workflows: 1  # Only one sequential chain at a time
+  max_parallel_api_calls: 3    # API calls within a single workflow can still be parallel
   
   # Timeouts (in seconds)
   workflow_timeout: 3600  # 1 hour
@@ -243,9 +220,9 @@ notifications:
     webhook_url: ""
     channel: "#dev-automation"
     notify_on:
-      - "task_decomposition_complete"
-      - "pr_created"
-      - "pr_merged"
+      - "sequential_task_decomposition_complete"
+      - "sequential_pr_created"
+      - "sequential_execution_complete"
       - "error"
   
   # Email notifications
@@ -255,8 +232,8 @@ notifications:
     from_address: ""
     to_addresses: []
     notify_on:
-      - "workflow_complete"
-      - "workflow_failed"
+      - "sequential_workflow_complete"
+      - "sequential_workflow_failed"
   
   # GitHub notifications
   github:
@@ -283,55 +260,36 @@ cost_management:
   track_per_project: true
   generate_cost_reports: true
 
-# Backup and Recovery
-backup:
+# Recovery Settings
+recovery:
+  # State recovery
+  enable_auto_recovery: true
+  recovery_retry_limit: 3
+  
+  # Backup settings
+  backup_sequential_state: true
+  state_backup_retention_days: 7
+  
   # Artifact backup
   backup_artifacts: true
   artifact_retention_days: 30
-  
-  # State backup
-  backup_workflow_state: true
-  state_retention_days: 7
-  
-  # Recovery
-  enable_auto_recovery: true
-  recovery_retry_limit: 3
 
-# Custom Extensions
-extensions:
-  # Custom scripts
-  pre_decomposition_script: ""
-  post_decomposition_script: ""
-  pre_pr_script: ""
-  post_pr_script: ""
-  
-  # Webhooks
-  webhooks:
-    task_created: ""
-    pr_created: ""
-    pr_merged: ""
-    workflow_complete: ""
-  
-  # Plugins
-  plugins_enabled: false
-  plugins_directory: "plugins/"
-
-# Environment-specific Settings
+# Sequential Execution Environments
 environments:
   development:
     max_tasks_default: 5
-    auto_implement: false
     create_draft_prs: true
+    enable_debug_logging: true
   
   staging:
     max_tasks_default: 10
-    auto_implement: true
     create_draft_prs: true
+    enable_debug_logging: false
   
   production:
     max_tasks_default: 15
-    auto_implement: true
     create_draft_prs: false
+    enable_debug_logging: false
 
 # Default environment
 default_environment: "production"
