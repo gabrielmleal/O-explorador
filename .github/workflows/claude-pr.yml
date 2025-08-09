@@ -48,6 +48,7 @@ jobs:
         with:
           ref: ${{ steps.pr_details.outputs.head_ref }}
           fetch-depth: 0
+          token: ${{ secrets.WORKFLOW_TRIGGER_TOKEN || github.token }}
       
       - name: Extract Claude command
         id: extract_command
