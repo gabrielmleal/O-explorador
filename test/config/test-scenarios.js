@@ -8,7 +8,9 @@ const testScenarios = {
     timeout: 30,
     context: {
       title: '[SEQUENTIAL] E2E Test: Basic 3-Task Implementation',
-      body: `## 📋 Project Context for Sequential Implementation
+      body: `@claude
+
+## 📋 Project Context for Sequential Implementation
 
 ### Overview
 Create a simple web application with user authentication and basic CRUD operations. This is an E2E test to validate the sequential workflow system.
@@ -83,7 +85,9 @@ As a user, I want to view a dashboard so that I can see my information and accou
     timeout: 15,
     context: {
       title: '[SEQUENTIAL] E2E Test: Single Task Implementation',
-      body: `## 📋 Project Context for Sequential Implementation
+      body: `@claude
+
+## 📋 Project Context for Sequential Implementation
 
 ### Overview
 Create a simple "Hello World" web server to test single-task sequential execution.
@@ -128,7 +132,9 @@ Create a simple "Hello World" web server to test single-task sequential executio
     timeout: 25,
     context: {
       title: '[SEQUENTIAL] E2E Test: Error Recovery Scenario',
-      body: `## 📋 Project Context for Sequential Implementation
+      body: `@claude
+
+## 📋 Project Context for Sequential Implementation
 
 ### Overview
 Test error recovery capabilities with requirements that may cause validation or implementation challenges.
@@ -184,7 +190,9 @@ Test error recovery capabilities with requirements that may cause validation or 
     timeout: 45,
     context: {
       title: '[SEQUENTIAL] E2E Test: Maximum Tasks Implementation',
-      body: `## 📋 Project Context for Sequential Implementation
+      body: `@claude
+
+## 📋 Project Context for Sequential Implementation
 
 ### Overview
 Create a comprehensive task management application with multiple interconnected features to test maximum sequential workflow capacity.
