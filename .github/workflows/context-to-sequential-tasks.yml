@@ -40,35 +40,33 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           custom_instructions: |
-            Read CLAUDE.md and understand this project's sequential task execution system.
+            **TASK**: Create a file named `tasks.json` that breaks down this project requirement into sequential implementation tasks.
             
-            IMPORTANT: This system executes tasks SEQUENTIALLY, not in parallel. Each task will:
-            1. Build on the changes from the previous task
-            2. Create a PR that stacks on the previous task's branch
-            3. Automatically trigger the next task when complete
-            
-            Break down this context into sequential, dependent tasks:
-            
+            **PROJECT REQUIREMENT**:
             ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.context || github.event.issue.body }}
             
-            Create tasks.json with this structure:
+            **CREATE THIS FILE**: `tasks.json`
+            ```json
             {
               "tasks": [
                 {
-                  "title": "Clear, specific task title",
-                  "body": "Detailed task description that considers it will build on previous tasks' changes"
+                  "title": "Task 1 title - what to implement first",
+                  "body": "Detailed description of what to build/create/implement"
+                },
+                {
+                  "title": "Task 2 title - what to implement next",
+                  "body": "Detailed description building on task 1"
                 }
               ]
             }
+            ```
             
-            Guidelines for sequential tasks:
-            - Each task should logically build on the previous ones
-            - Later tasks can reference and use changes from earlier tasks
-            - Tasks should be atomic but aware of the cumulative context
-            - Consider dependencies and logical ordering
-            - Include context about what each task expects from previous tasks
-            
-            Max tasks: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.max_tasks || '10' }}
+            **REQUIREMENTS**:
+            - Create 3-5 tasks maximum
+            - Each task should implement specific functionality
+            - Tasks should build on each other logically
+            - Focus on actual implementation, not planning or documentation
+            - Use clear, specific titles that describe what to build
 
       - name: Setup sequential task execution
         id: setup-sequential
