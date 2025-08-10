@@ -13,6 +13,7 @@ import ObjetosDoMapa.Inimigo;
 import ObjetosDoMapa.Jogador;
 import ObjetosDoMapa.LoboCinza;
 import ObjetosDoMapa.LoboVermelho;
+import ObjetosDoMapa.Urso;
 import ObjetosDoMapa.Portal;
 import Principal.JogoPanel;
 import java.awt.Graphics2D;
@@ -140,6 +141,11 @@ public class Estado_Level1 extends Estado {//classe do estado de level 1
         lobo = new LoboVermelho(mb);
         lobo.mudarPosicaoPara(4660, 50);
         inimigos.add(lobo);
+        
+        // Add bear enemy near the end of the level, close to the portal
+        Inimigo urso = new Urso(mb);
+        urso.mudarPosicaoPara(4750, 165);
+        inimigos.add(urso);
         
     }
     //atualiza o level 1
