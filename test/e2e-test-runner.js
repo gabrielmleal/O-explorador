@@ -400,7 +400,12 @@ class E2ETestRunner {
         duration: `${this.testResults.durationMinutes} minutes`,
         tasksExecuted: this.testResults.tasksCompleted,
         workflowsExecuted: this.testResults.workflowsExecuted,
-        prsCreated: this.testResults.prsCreated
+        prsCreated: this.testResults.prsCreated,
+        finalState: finalState ? {
+          status: finalState.status,
+          completedTasks: finalState.tasks?.filter(t => t.status === 'completed')?.length || 0,
+          totalTasks: finalState.tasks?.length || 0
+        } : null
       };
 
       this.log('🎉 E2E test PASSED!', this.testResults.summary);
