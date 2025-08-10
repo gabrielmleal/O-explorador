@@ -14,6 +14,7 @@ import ObjetosDoMapa.Jogador;
 import ObjetosDoMapa.LoboCinza;
 import ObjetosDoMapa.LoboVermelho;
 import ObjetosDoMapa.Portal;
+import ObjetosDoMapa.TeleportEffect;
 import Principal.JogoPanel;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
@@ -31,6 +32,7 @@ public class Estado_Level1 extends Estado {//classe do estado de level 1
     private Jogador jogador;//cria um novo jogador
     private ArrayList<Inimigo> inimigos;
     private ArrayList<Explosao> explosoes;
+    private ArrayList<TeleportEffect> teleportEffects;
     private Portal portal;
     
     private int contadorFase;
@@ -68,6 +70,7 @@ public class Estado_Level1 extends Estado {//classe do estado de level 1
         
         
         explosoes = new ArrayList<>();
+        teleportEffects = new ArrayList<>();
         
         portal = new Portal(mb);
         portal.mudarPosicaoPara(4875, 165);
@@ -178,7 +181,25 @@ public class Estado_Level1 extends Estado {//classe do estado de level 1
                 explosoes.remove(i);
                 i--;
             }
-        }   
+        }
+        
+        // Handle teleportation effects
+        if(jogador.solicitaEfeitoPartida()){
+            int[] partida = jogador.posicaoPartida();
+            teleportEffects.add(new TeleportEffect(mb, partida[0], partida[1]));
+        }
+        if(jogador.solicitaEfeitoChegada()){
+            int[] chegada = jogador.posicaoChegada();
+            teleportEffects.add(new TeleportEffect(mb, chegada[0], chegada[1]));
+        }
+        
+        for(int i=0;i<teleportEffects.size();i++){
+            teleportEffects.get(i).atualiza();
+            if(teleportEffects.get(i).deveRemover()){
+                teleportEffects.remove(i);
+                i--;
+            }
+        }
     }
                 
     //desenha a fase
@@ -195,6 +216,9 @@ public class Estado_Level1 extends Estado {//classe do estado de level 1
         for(int i=0;i<explosoes.size();i++){
             explosoes.get(i).desenha(g);
         }
+        for(int i=0;i<teleportEffects.size();i++){
+            teleportEffects.get(i).desenha(g);
+        }
     }
     
     public void keyPressed(int k){
@@ -210,6 +234,7 @@ public class Estado_Level1 extends Estado {//classe do estado de level 1
         if(k==KeyEvent.VK_Z) jogador.ataca();
         if(k==KeyEvent.VK_X) jogador.atira();
         if(k==KeyEvent.VK_C) jogador.corre(true);
+        if(k==KeyEvent.VK_V) jogador.teleporta(); // Teleport with V key
         if(k==KeyEvent.VK_B) jogador.mudarPosicaoPara(4800, 50);
     }
     

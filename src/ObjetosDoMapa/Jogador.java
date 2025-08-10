@@ -32,9 +32,13 @@ public class Jogador extends ObjetoMapa {
     private boolean puloDuploUsado;
     
     //Atributos de ataques e ações do jogador
-    private boolean atirando, atirou, atacando, correndo, terminando;
+    private boolean atirando, atirou, atacando, correndo, terminando, teleportando;
     private double atacaAlcance;
     private ArrayList<Flecha> flechas;
+    
+    // Teleportation attributes
+    private int partidaX, partidaY, chegadaX, chegadaY;
+    private boolean efectoPartida, efectoChegada;
     
     //Atributos de animação
     private ArrayList<BufferedImage[]> sprites;
@@ -114,6 +118,101 @@ public class Jogador extends ObjetoMapa {
         if(!atacando) atirando = true;
     }
     public void corre(boolean b){ correndo = b;}
+    
+    public void teleporta(){
+        if(atacando || atirando) return; // Cannot teleport during attack/shooting
+        teleportando = true;
+        
+        // Store departure position for effect
+        partidaX = (int)x;
+        partidaY = (int)y;
+        efectoPartida = true;
+        
+        realizaTeleporte();
+        
+        // Store arrival position for effect  
+        chegadaX = (int)x;
+        chegadaY = (int)y;
+        efectoChegada = true;
+        
+        teleportando = false;
+    }
+    
+    private void realizaTeleporte(){
+        int direcao = olhandoDireita ? 1 : -1;
+        int destinoX = (int)(x + (300 * direcao));
+        int destinoY = (int)y;
+        
+        // Find safe teleport position with collision detection
+        int[] posicaoSegura = encontrarPosicaoSegura(destinoX, destinoY, direcao);
+        mudarPosicaoPara(posicaoSegura[0], posicaoSegura[1]);
+    }
+    
+    private int[] encontrarPosicaoSegura(int destinoX, int destinoY, int direcao){
+        int passos = 10; // Divide 300 pixels into 10 steps of 30 pixels each
+        int incremento = 300 / passos;
+        
+        int ultimaXSegura = (int)x;
+        int ultimaYSegura = (int)y;
+        
+        for(int i = 1; i <= passos; i++){
+            int testeX = (int)x + (incremento * i * direcao);
+            int testeY = destinoY;
+            
+            if(verificarColisaoNaPosicao(testeX, testeY)){
+                break; // Stop at collision
+            }
+            
+            ultimaXSegura = testeX;
+            ultimaYSegura = testeY;
+        }
+        
+        return new int[]{ultimaXSegura, ultimaYSegura};
+    }
+    
+    private boolean verificarColisaoNaPosicao(int testeX, int testeY){
+        // Check map boundaries
+        if(testeX < 0 || testeY < 0) return true;
+        
+        int tileSize = mb.qualTamanhoDoBloco();
+        int mapWidth = mb.qualNumDeColunas() * tileSize;
+        int mapHeight = mb.qualNumDeLinhas() * tileSize;
+        
+        if(testeX > mapWidth || testeY > mapHeight) return true;
+        
+        // Check collision with blocked tiles using player's collision box
+        int xTileLeft = (testeX - clargura/2) / tileSize;
+        int xTileRight = (testeX + clargura/2) / tileSize;
+        int yTileTop = (testeY - caltura/2) / tileSize;
+        int yTileBottom = (testeY + caltura/2) / tileSize;
+        
+        // Check all four corners of player's collision box
+        if(mb.qualTipo(yTileTop, xTileLeft) == mb.BLOCKED) return true;
+        if(mb.qualTipo(yTileTop, xTileRight) == mb.BLOCKED) return true;
+        if(mb.qualTipo(yTileBottom, xTileLeft) == mb.BLOCKED) return true;
+        if(mb.qualTipo(yTileBottom, xTileRight) == mb.BLOCKED) return true;
+        
+        return false;
+    }
+    
+    public boolean solicitaEfeitoPartida(){
+        if(efectoPartida){
+            efectoPartida = false;
+            return true;
+        }
+        return false;
+    }
+    
+    public boolean solicitaEfeitoChegada(){
+        if(efectoChegada){
+            efectoChegada = false;
+            return true;
+        }
+        return false;
+    }
+    
+    public int[] posicaoPartida(){ return new int[]{partidaX, partidaY}; }
+    public int[] posicaoChegada(){ return new int[]{chegadaX, chegadaY}; }
     
     public void tentarPuloDuplo(){
         if(podeUsarPuloDuplo && !puloDuploUsado && (acaoAtual == PULANDO || acaoAtual == CAINDO)){
