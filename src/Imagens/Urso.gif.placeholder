@@ -1,0 +1,31 @@
+PLACEHOLDER FOR BEAR SPRITE
+
+This file serves as a placeholder for the bear enemy sprite (Urso.gif).
+
+SPRITE SPECIFICATIONS:
+- Filename: Urso.gif  
+- Format: GIF with animation frames
+- Dimensions: 30x30 pixels per frame
+- Layout: 
+  * Row 1: Idle frame (1 frame at 0,0)
+  * Row 2: Walking animation (4 frames at 0,30 through 90,30)
+- Total image size: 120x60 pixels (4 frames wide, 2 rows tall)
+
+TEMPORARY SOLUTION:
+Due to limitations in generating image files, this task creates documentation 
+for the required sprite. In the next task (Bear class creation), the code 
+should temporarily use LoboCinza.gif as specified in the constraints:
+"If you find hard to create bear files due to limitations, just use a mock 
+or a wolf sprite temporarily instead"
+
+IMPLEMENTATION NOTE:
+The bear sprite should follow the same pattern as existing wolf sprites:
+- LoboCinza.gif: Grey wolf with idle + walking frames
+- LoboVermelho.gif: Red wolf with idle + walking frames
+
+For the bear implementation, the code should load this sprite with:
+BufferedImage sprite = ImageIO.read(getClass().getResourceAsStream("/Imagens/Urso.gif"));
+
+FUTURE REPLACEMENT:
+When a proper bear sprite is available, replace this placeholder file with 
+the actual Urso.gif following the specifications above.
