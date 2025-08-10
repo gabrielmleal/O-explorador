@@ -115,6 +115,19 @@ public class Jogador extends ObjetoMapa {
     }
     public void corre(boolean b){ correndo = b;}
     
+    public void teleport(){
+        // Calculate teleport destination based on facing direction
+        double destX = x;
+        if(olhandoDireita){
+            destX = x + 300; // Teleport 300 pixels to the right
+        } else {
+            destX = x - 300; // Teleport 300 pixels to the left
+        }
+        
+        // Teleport to the destination position
+        mudarPosicaoPara(destX, y);
+    }
+    
     public void tentarPuloDuplo(){
         if(podeUsarPuloDuplo && !puloDuploUsado && (acaoAtual == PULANDO || acaoAtual == CAINDO)){
             dy = comecoPulo;
