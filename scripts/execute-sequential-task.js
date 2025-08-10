@@ -166,50 +166,63 @@ ${'---'}
   execSync('git config user.name "Claude Sequential Bot"');
   execSync('git config user.email "claude-sequential@anthropic.com"');
 
-  // Checkout from the previous branch (this is critical for sequential execution)
-  console.log(`🔄 Checking out from branch: ${previousBranch}`);
+  // Prepare sequential branch with accumulated changes from previous tasks
+  console.log(`🔧 Preparing sequential branch with changes from: ${previousBranch}`);
   try {
     // Fetch latest changes first
     execSync('git fetch origin');
     
-    // Checkout the previous branch if it's not main
+    // Start from main as the base
+    console.log(`🔄 Starting from main branch`);
+    execSync('git checkout main');
+    execSync('git pull origin main');
+    
+    // Create or checkout our sequential task branch
+    console.log(`🌿 Setting up sequential branch: ${taskBranch}`);
+    
+    // Delete existing branch if it exists
+    try {
+      execSync(`git branch -D ${taskBranch}`, { stdio: 'pipe' });
+      console.log(`🗑️ Deleted existing local branch: ${taskBranch}`);
+    } catch (e) {
+      // Branch doesn't exist locally, that's fine
+    }
+    
+    // Create new branch from main
+    execSync(`git checkout -b ${taskBranch}`);
+    console.log(`✅ Created new sequential branch: ${taskBranch}`);
+    
+    // If previous branch exists and isn't main, merge its changes
     if (previousBranch !== 'main') {
       try {
-        // First check if branch exists remotely
+        // Check if previous branch exists remotely
         const remoteBranchCheck = execSync(`git ls-remote --heads origin ${previousBranch}`, { encoding: 'utf8' }).trim();
         
         if (remoteBranchCheck) {
-          console.log(`🔍 Remote branch ${previousBranch} exists, checking out...`);
+          console.log(`📥 Merging changes from previous task branch: ${previousBranch}`);
           
-          // Delete local branch if it exists to avoid conflicts
-          try {
-            execSync(`git branch -D ${previousBranch}`, { stdio: 'pipe' });
-            console.log(`🗑️ Deleted existing local branch: ${previousBranch}`);
-          } catch (e) {
-            // Branch doesn't exist locally, that's fine
-          }
+          // Merge previous task's changes into our sequential branch
+          execSync(`git merge origin/${previousBranch} --no-edit -m "Merge previous task changes from ${previousBranch}"`);
+          console.log(`✅ Successfully merged changes from ${previousBranch}`);
           
-          // Checkout remote branch and create local tracking branch
-          execSync(`git checkout -b ${previousBranch} origin/${previousBranch}`);
-          console.log(`✅ Checked out and tracking remote branch: ${previousBranch}`);
+          // Verify we have the accumulated changes
+          const comparison = execSync(`git rev-list --count main..HEAD`, { encoding: 'utf8' }).trim();
+          const commitsAhead = parseInt(comparison);
+          console.log(`📊 Sequential branch now has ${commitsAhead} commits ahead of main`);
+          
         } else {
-          console.log(`⚠️ Branch ${previousBranch} doesn't exist remotely, using main as base`);
-          execSync('git checkout main');
-          execSync('git pull origin main');
+          console.log(`ℹ️ Previous branch ${previousBranch} doesn't exist remotely - continuing from main`);
         }
       } catch (error) {
-        console.log(`❌ Error checking out branch ${previousBranch}:`, error.message);
-        console.log(`⚠️ Falling back to main branch`);
-        execSync('git checkout main');
-        execSync('git pull origin main');
+        console.log(`⚠️ Could not merge previous branch ${previousBranch}: ${error.message}`);
+        console.log(`🔄 Continuing from main branch`);
       }
     } else {
-      console.log(`🔄 Checking out main branch`);
-      execSync('git checkout main');
-      execSync('git pull origin main');
+      console.log(`ℹ️ First task - starting from clean main branch`);
     }
+    
   } catch (error) {
-    console.log('❌ Critical error during branch checkout:', error.message);
+    console.log('❌ Critical error during sequential branch setup:', error.message);
     console.log('⚠️ Falling back to main branch');
     execSync('git checkout main || git checkout -b main');
   }
@@ -406,8 +419,28 @@ module.exports.handleTaskCompletion = async ({ github, context, core, taskContex
         const commitsAhead = parseInt(comparison);
         
         if (commitsAhead > 0) {
-          console.log(`📊 Claude's branch has ${commitsAhead} commits ahead of main - perfect!`);
-          actualBranch = claudeBranch;
+          console.log(`📊 Claude's branch has ${commitsAhead} commits ahead of main`);
+          
+          // For sequential continuity, merge Claude's changes back to sequential branch
+          console.log(`🔀 Merging Claude's changes to sequential branch for next task continuity`);
+          try {
+            // Switch to sequential branch and merge Claude's changes
+            execSync(`git checkout ${currentBranch}`);
+            execSync(`git merge origin/${claudeBranch} --no-edit -m "Merge Claude's implementation from ${claudeBranch}"`);
+            
+            console.log(`✅ Merged Claude's changes into sequential branch: ${currentBranch}`);
+            actualBranch = currentBranch; // Use sequential branch with all changes
+            
+            // Verify final state
+            const finalComparison = execSync(`git rev-list --count main..HEAD`, { encoding: 'utf8' }).trim();
+            const finalCommits = parseInt(finalComparison);
+            console.log(`📊 Sequential branch now has ${finalCommits} commits ahead of main`);
+            
+          } catch (mergeError) {
+            console.log(`❌ Failed to merge Claude's changes back: ${mergeError.message}`);
+            console.log(`🔄 Using Claude's branch directly: ${claudeBranch}`);
+            actualBranch = claudeBranch;
+          }
         } else {
           console.log(`⚠️ Claude's branch has no commits ahead of main, using sequential branch`);
         }
