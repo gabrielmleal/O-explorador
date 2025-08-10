@@ -209,43 +209,18 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           custom_instructions: |
-            You are implementing Task ${{ steps.prepare-task.outputs.task_number }} of ${{ steps.prepare-task.outputs.total_tasks }} in a SEQUENTIAL task execution system.
-
-            **CRITICAL CONTEXT**: This task builds on previous tasks changes. You are currently working on branch `${{ steps.prepare-task.outputs.current_branch }}` which was created from `${{ steps.prepare-task.outputs.previous_branch }}`.
-
-            **TASK TO IMPLEMENT**: ${{ steps.prepare-task.outputs.task_title }}
-
-            **SEQUENTIAL EXECUTION CONTEXT**:
-            - Task Index: ${{ steps.prepare-task.outputs.task_number }}/${{ steps.prepare-task.outputs.total_tasks }}
-            - Current Branch: `${{ steps.prepare-task.outputs.current_branch }}`
-            - Base Branch: `${{ steps.prepare-task.outputs.previous_branch }}`
-            - Task Context: Available in `current-task-context.json`
-
-            **INSTRUCTIONS**:
-            1. Read `CLAUDE.md` for project guidelines and understand the sequential task execution system
-            2. **CRITICAL**: Read `current-task-context.json` which contains:
-               - `taskData`: Full task details (title, description, requirements)
-               - `sequentialContext`: The original project context and requirements
-               - `previousTasks`: All completed tasks and their implementations
-               - `taskIndex`/`totalTasks`: Your position in the sequence
-               - `previousBranch`: The branch containing previous tasks' changes
-            3. Examine existing code to understand previous tasks implementations
-            4. Implement this specific task building on existing changes from previous tasks
-            5. Follow project conventions and best practices
-            6. Create/modify all necessary files for this task
-            7. Ensure code is production-ready with proper error handling
-            8. Write tests if the project has testing infrastructure
-
-            **IMPORTANT SEQUENTIAL CONSIDERATIONS**:
-            - You are working with cumulative changes from previous tasks
-            - Use the `sequentialContext` from the context file to understand the overall goal
-            - Review `previousTasks` to understand what has already been implemented
-            - Focus only on implementing this specific task (`taskData.title` and `taskData.body`)
-            - Build upon and integrate with existing code from previous tasks
-            - Do not redo work from previous tasks unless necessary for integration
-            - Your changes will be part of a stacked PR system
-
-            **YOUR GOAL**: Implement working code for this task, not just task descriptions. Create actual files, functions, and implementations that fulfill the task requirements. Use all the context information to understand dependencies and build upon previous work.
+            **TASK**: ${{ steps.prepare-task.outputs.task_title }}
+            
+            **IMPLEMENTATION REQUIRED**: Create actual working code, files, and implementations - not task descriptions or documentation.
+            
+            **SPECIFIC INSTRUCTIONS**:
+            - Examine the existing codebase to understand the project structure
+            - Implement the specific functionality described in the task title
+            - Create or modify all necessary files
+            - Follow existing code patterns and conventions
+            - Ensure all code is functional and production-ready
+            
+            **CONTEXT**: This is task ${{ steps.prepare-task.outputs.task_number }} of ${{ steps.prepare-task.outputs.total_tasks }} in a sequential implementation. Build upon any existing changes from previous tasks if applicable.
           timeout_minutes: 30
 
       - name: Handle sequential task completion
@@ -262,15 +237,25 @@ jobs:
             try {
               console.log('📋 Handling sequential task completion...');
               
-              // Check if current-task-context.json exists (should exist from task preparation)
-              if (!fs.existsSync('current-task-context.json')) {
-                console.log('❌ Current task context file not found');
-                core.setFailed('Task context file missing - cannot handle completion');
-                return;
-              }
+              // Get task context from preparation step outputs
+              const taskIndex = parseInt('${{ steps.prepare-task.outputs.task_index }}');
+              const totalTasks = parseInt('${{ steps.prepare-task.outputs.total_tasks }}');
+              const taskTitle = '${{ steps.prepare-task.outputs.task_title }}';
+              const currentBranch = '${{ steps.prepare-task.outputs.current_branch }}';
+              const previousBranch = '${{ steps.prepare-task.outputs.previous_branch }}';
+              const parentIssue = parseInt('${{ steps.parse-trigger.outputs.parent_issue }}');
               
-              const taskContext = JSON.parse(fs.readFileSync('current-task-context.json', 'utf8'));
-              console.log(`📋 Processing completion for Task ${taskContext.taskIndex + 1}: ${taskContext.taskData.title}`);
+              console.log(`📋 Processing completion for Task ${taskIndex + 1}: ${taskTitle}`);
+              
+              // Create minimal task context for completion handler
+              const taskContext = {
+                taskIndex: taskIndex,
+                totalTasks: totalTasks,
+                taskData: { title: taskTitle },
+                currentBranch: currentBranch,
+                previousBranch: previousBranch,
+                parentIssue: parentIssue
+              };
               
               // Import the task completion handler
               const executeSequentialTask = require(path.join(process.cwd(), 'scripts', 'execute-sequential-task.js'));
@@ -308,11 +293,3 @@ jobs:
               core.setFailed(`Task completion failed: ${error.message}`);
             }
 
-      - name: Upload task artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: sequential-task-${{ steps.prepare-task.outputs.task_number || 'unknown' }}-artifacts
-          path: |
-            current-task-context.json
-          retention-days: 30
