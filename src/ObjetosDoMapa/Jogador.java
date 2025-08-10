@@ -36,6 +36,9 @@ public class Jogador extends ObjetoMapa {
     private double atacaAlcance;
     private ArrayList<Flecha> flechas;
     
+    //Atributos do teleporte
+    private boolean teleportando;
+    
     //Atributos de animação
     private ArrayList<BufferedImage[]> sprites;
     private int[] numFrames =  {1, 4, 2, 2, 6, 6, 9};
@@ -114,6 +117,28 @@ public class Jogador extends ObjetoMapa {
         if(!atacando) atirando = true;
     }
     public void corre(boolean b){ correndo = b;}
+    
+    public void teleporta(){
+        if(!atacando && !atirando && !teleportando){
+            teleportando = true;
+            realizaTeleporte();
+        }
+    }
+    
+    private void realizaTeleporte(){
+        double novaX = x;
+        double novaY = y;
+        
+        if(olhandoDireita){
+            novaX = x + 300;
+        } else {
+            novaX = x - 300;
+        }
+        
+        // Move o jogador para a nova posição
+        mudarPosicaoPara(novaX, novaY);
+        teleportando = false;
+    }
     
     public void tentarPuloDuplo(){
         if(podeUsarPuloDuplo && !puloDuploUsado && (acaoAtual == PULANDO || acaoAtual == CAINDO)){

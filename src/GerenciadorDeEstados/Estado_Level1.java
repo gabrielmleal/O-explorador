@@ -210,6 +210,7 @@ public class Estado_Level1 extends Estado {//classe do estado de level 1
         if(k==KeyEvent.VK_Z) jogador.ataca();
         if(k==KeyEvent.VK_X) jogador.atira();
         if(k==KeyEvent.VK_C) jogador.corre(true);
+        if(k==KeyEvent.VK_V) jogador.teleporta();
         if(k==KeyEvent.VK_B) jogador.mudarPosicaoPara(4800, 50);
     }
     
