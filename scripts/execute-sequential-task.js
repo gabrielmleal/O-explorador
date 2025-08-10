@@ -394,6 +394,20 @@ ${taskContext.previousTasks.map(t => `- Task ${t.id}: ${t.title}`).join('\n') ||
 🤖 Generated with Claude Code Sequential Executor
 Co-authored-by: Claude <claude@anthropic.com>"`);
 
+  // Configure git credentials for push operation
+  const workflowToken = process.env.WORKFLOW_TRIGGER_TOKEN || process.env.GITHUB_TOKEN;
+  if (workflowToken) {
+    console.log('🔐 Configuring git credentials for push...');
+    // Configure git to use token for HTTPS authentication
+    execSync(`git config credential.helper store`);
+    execSync(`git config credential.https://github.com.username ${workflowToken}`);
+    // Alternative approach: configure the remote URL with token
+    const remoteUrl = `https://${workflowToken}@github.com/${context.repo.owner}/${context.repo.repo}.git`;
+    execSync(`git remote set-url origin "${remoteUrl}"`);
+  } else {
+    console.log('⚠️ No authentication token found in environment');
+  }
+
   // Push the task branch
   console.log(`🚀 Pushing branch: ${currentBranch}`);
   execSync(`git push origin ${currentBranch}`);
