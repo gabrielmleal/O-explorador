@@ -171,20 +171,12 @@ ${'---'}
   console.log(`🌿 Creating task branch: ${taskBranch}`);
 
   // Prepare sequential branch with accumulated changes from previous tasks
-  console.log(`🔧 Preparing sequential branch with changes from: ${previousBranch}`);
+  console.log(`🔧 Preparing sequential branch building from: ${previousBranch}`);
   try {
     // Fetch latest changes first
     execSync('git fetch origin');
     
-    // Start from main as the base
-    console.log(`🔄 Starting from main branch`);
-    execSync('git checkout main');
-    execSync('git pull origin main');
-    
-    // Create or checkout our sequential task branch
-    console.log(`🌿 Setting up sequential branch: ${taskBranch}`);
-    
-    // Delete existing branch if it exists
+    // Delete existing local branch if it exists
     try {
       execSync(`git branch -D ${taskBranch}`, { stdio: 'pipe' });
       console.log(`🗑️ Deleted existing local branch: ${taskBranch}`);
@@ -192,43 +184,65 @@ ${'---'}
       // Branch doesn't exist locally, that's fine
     }
     
-    // Create new branch from main
-    execSync(`git checkout -b ${taskBranch}`);
-    console.log(`✅ Created new sequential branch: ${taskBranch}`);
-    
-    // If previous branch exists and isn't main, merge its changes
+    // FIXED: Start from the previous task's branch to accumulate changes sequentially
     if (previousBranch !== 'main') {
+      console.log(`🔧 SEQUENTIAL ACCUMULATION: Starting from previous task branch: ${previousBranch}`);
+      
+      // Check if previous branch exists remotely
       try {
-        // Check if previous branch exists remotely
         const remoteBranchCheck = execSync(`git ls-remote --heads origin ${previousBranch}`, { encoding: 'utf8' }).trim();
         
         if (remoteBranchCheck) {
-          console.log(`📥 Merging changes from previous task branch: ${previousBranch}`);
+          console.log(`📥 Checking out previous task branch: ${previousBranch}`);
           
-          // Merge previous task's changes into our sequential branch
-          execSync(`git merge origin/${previousBranch} --no-edit -m "Merge previous task changes from ${previousBranch}"`);
-          console.log(`✅ Successfully merged changes from ${previousBranch}`);
+          // Checkout previous branch (with all accumulated changes)
+          execSync(`git checkout -b temp-${taskBranch} origin/${previousBranch}`);
+          
+          // Create our new task branch from the previous task's branch
+          execSync(`git checkout -b ${taskBranch}`);
+          console.log(`✅ Created ${taskBranch} from ${previousBranch} (with all previous task changes)`);
+          
+          // Clean up temp branch
+          execSync(`git branch -D temp-${taskBranch}`, { stdio: 'pipe' });
           
           // Verify we have the accumulated changes
           const comparison = execSync(`git rev-list --count main..HEAD`, { encoding: 'utf8' }).trim();
           const commitsAhead = parseInt(comparison);
-          console.log(`📊 Sequential branch now has ${commitsAhead} commits ahead of main`);
+          console.log(`📊 Sequential branch has ${commitsAhead} commits ahead of main (accumulated from previous tasks)`);
           
         } else {
-          console.log(`ℹ️ Previous branch ${previousBranch} doesn't exist remotely - continuing from main`);
+          console.log(`⚠️ Previous branch ${previousBranch} doesn't exist remotely - falling back to main`);
+          // Fallback to main for first task or if previous branch missing
+          execSync('git checkout main');
+          execSync('git pull origin main');
+          execSync(`git checkout -b ${taskBranch}`);
+          console.log(`✅ Created ${taskBranch} from main (fallback)`);
         }
+        
       } catch (error) {
-        console.log(`⚠️ Could not merge previous branch ${previousBranch}: ${error.message}`);
-        console.log(`🔄 Continuing from main branch`);
+        console.log(`⚠️ Could not checkout previous branch ${previousBranch}: ${error.message}`);
+        console.log(`🔄 Falling back to main branch`);
+        // Fallback to main
+        execSync('git checkout main');
+        execSync('git pull origin main');
+        execSync(`git checkout -b ${taskBranch}`);
+        console.log(`✅ Created ${taskBranch} from main (error fallback)`);
       }
+      
     } else {
-      console.log(`ℹ️ First task - starting from clean main branch`);
+      console.log(`ℹ️ First task - starting from main branch`);
+      // First task starts from main
+      execSync('git checkout main');
+      execSync('git pull origin main');
+      execSync(`git checkout -b ${taskBranch}`);
+      console.log(`✅ Created first task branch: ${taskBranch} from main`);
     }
     
   } catch (error) {
     console.log('❌ Critical error during sequential branch setup:', error.message);
-    console.log('⚠️ Falling back to main branch');
+    console.log('⚠️ Emergency fallback to main branch');
     execSync('git checkout main || git checkout -b main');
+    execSync(`git checkout -b ${taskBranch} || echo "Branch creation failed"`);
   }
   
   try {
@@ -300,7 +314,99 @@ ${'---'}
       stateCommentId: stateCommentId
     };
     
-    console.log(`✅ Task context prepared (no context file needed - Claude will use direct instructions)`);
+    // CRITICAL FIX: Create detailed context file for Claude
+    console.log(`📝 Creating comprehensive task context file for Claude...`);
+    
+    // Analyze what files were changed in previous tasks to provide context
+    let previousImplementations = [];
+    let modifiedFiles = [];
+    
+    if (taskIndex > 0) {
+      console.log(`🔍 Analyzing previous task implementations for context...`);
+      
+      // Get list of files that were modified from main to current branch
+      try {
+        const filesList = execSync('git diff --name-only main..HEAD', { encoding: 'utf8' }).trim();
+        if (filesList) {
+          modifiedFiles = filesList.split('\n').filter(f => f.trim());
+          console.log(`📁 Files modified in previous tasks: ${modifiedFiles.length} files`);
+        }
+      } catch (error) {
+        console.log(`⚠️ Could not analyze file changes: ${error.message}`);
+      }
+      
+      // Create implementation summaries for previous tasks
+      sequentialState.tasks.slice(0, taskIndex).forEach((task, idx) => {
+        previousImplementations.push({
+          taskNumber: idx + 1,
+          title: task.title,
+          description: task.body,
+          status: task.status,
+          branch: task.branch,
+          completedAt: task.completed_at
+        });
+      });
+    }
+    
+    // Create comprehensive context for Claude
+    const claudeContext = {
+      // Current task information
+      currentTask: {
+        taskNumber: taskIndex + 1,
+        title: currentTask.title,
+        description: currentTask.body,
+        branch: taskBranch,
+        previousBranch: previousBranch
+      },
+      
+      // Sequential execution context
+      sequentialExecution: {
+        totalTasks: sequentialState.tasks.length,
+        currentTaskIndex: taskIndex,
+        originalContext: sequentialState.context,
+        isFirstTask: taskIndex === 0,
+        isLastTask: taskIndex === sequentialState.tasks.length - 1
+      },
+      
+      // Previous task implementations (CRITICAL for avoiding re-implementation)
+      previousImplementations: previousImplementations,
+      
+      // Files that have been modified by previous tasks
+      modifiedFiles: modifiedFiles,
+      
+      // Implementation strategy for current task
+      implementationStrategy: {
+        buildOnPrevious: taskIndex > 0,
+        implementOnlyCurrentTask: true,
+        avoidReDevelopment: taskIndex > 0,
+        scopeBoundary: `Implement only the functionality described in "${currentTask.title}" - do NOT re-implement features from previous tasks`
+      },
+      
+      // Metadata for completion tracking
+      metadata: {
+        parentIssue: sequentialState.parent_issue,
+        stateCommentId: stateCommentId,
+        createdAt: new Date().toISOString(),
+        taskBranch: taskBranch,
+        baseBranch: previousBranch
+      }
+    };
+    
+    // Write context file for Claude
+    const contextFile = 'current-task-context.json';
+    fs.writeFileSync(contextFile, JSON.stringify(claudeContext, null, 2));
+    
+    console.log(`✅ Context file created: ${contextFile}`);
+    console.log(`📋 Context summary:`);
+    console.log(`   - Current task: ${currentTask.title}`);
+    console.log(`   - Previous tasks: ${previousImplementations.length}`);
+    console.log(`   - Modified files from previous: ${modifiedFiles.length}`);
+    console.log(`   - Implementation strategy: ${taskIndex > 0 ? 'Build incrementally' : 'Start from scratch'}`);
+    console.log(`   - Claude will now have full context about previous implementations`);
+    
+    // Also stage the context file so it's available to Claude
+    execSync(`git add ${contextFile}`);
+    console.log(`📝 Context file staged for Claude Code Action access`);
 
     // Push branch to remote immediately to ensure Claude Code Action can access it
     console.log(`🚀 Pushing branch to remote origin...`);
@@ -603,6 +709,77 @@ ${sequentialState.parent_issue ? `\nRelated to: #${sequentialState.parent_issue}
     sequentialState.tasks[taskIndex].pr_number = pr.number;
     sequentialState.tasks[taskIndex].completed_at = new Date().toISOString();
     sequentialState.updated_at = new Date().toISOString();
+    
+    // ENHANCED: Analyze and track what was actually implemented
+    console.log('📊 Analyzing implementation changes for state tracking...');
+    try {
+      // Get list of files that were modified in this task
+      const changedFiles = execSync(`git diff --name-only ${previousBranch}..HEAD`, { encoding: 'utf8' }).trim();
+      const modifiedFiles = changedFiles ? changedFiles.split('\n').filter(f => f.trim()) : [];
+      
+      // Get detailed diff stats
+      const diffStats = execSync(`git diff --stat ${previousBranch}..HEAD`, { encoding: 'utf8' }).trim();
+      const diffSummary = execSync(`git diff --numstat ${previousBranch}..HEAD`, { encoding: 'utf8' }).trim();
+      
+      // Count code changes
+      let linesAdded = 0, linesRemoved = 0;
+      if (diffSummary) {
+        diffSummary.split('\n').forEach(line => {
+          const [added, removed] = line.split('\t');
+          if (!isNaN(added) && !isNaN(removed)) {
+            linesAdded += parseInt(added);
+            linesRemoved += parseInt(removed);
+          }
+        });
+      }
+      
+      // Update implementation tracking in state
+      sequentialState.tasks[taskIndex].implementation = {
+        filesCreated: modifiedFiles.filter(f => {
+          // Check if file was newly created by seeing if it exists in previous branch
+          try {
+            execSync(`git show ${previousBranch}:${f}`, { stdio: 'pipe' });
+            return false; // File existed, so it was modified not created
+          } catch (e) {
+            return true; // File didn't exist, so it was created
+          }
+        }),
+        filesModified: modifiedFiles.filter(f => {
+          // Check if file was modified (existed in previous branch)
+          try {
+            execSync(`git show ${previousBranch}:${f}`, { stdio: 'pipe' });
+            return true; // File existed, so it was modified
+          } catch (e) {
+            return false; // File didn't exist, so it was created not modified
+          }
+        }),
+        functionalityImplemented: [taskData.title], // Basic functionality list
+        dependencies: taskIndex > 0 ? [`task-${taskIndex}`] : [],
+        implementationSummary: `Implemented "${taskData.title}": ${modifiedFiles.length} files changed, +${linesAdded}/-${linesRemoved} lines`,
+        codeChangesCount: { added: linesAdded, removed: linesRemoved, files: modifiedFiles.length },
+        testsCovered: modifiedFiles.filter(f => f.includes('test') || f.includes('spec')),
+        integrationPoints: modifiedFiles // Files that integrate with other parts
+      };
+      
+      console.log(`📊 Implementation tracking updated:`);
+      console.log(`   - Files modified: ${modifiedFiles.length}`);
+      console.log(`   - Code changes: +${linesAdded}/-${linesRemoved} lines`);
+      console.log(`   - Implementation summary: ${sequentialState.tasks[taskIndex].implementation.implementationSummary}`);
+      
+    } catch (analysisError) {
+      console.log('⚠️ Could not analyze implementation changes:', analysisError.message);
+      // Set basic implementation tracking even if analysis fails
+      sequentialState.tasks[taskIndex].implementation = {
+        filesCreated: [],
+        filesModified: [],
+        functionalityImplemented: [taskData.title],
+        dependencies: taskIndex > 0 ? [`task-${taskIndex}`] : [],
+        implementationSummary: `Completed "${taskData.title}" (analysis failed)`,
+        codeChangesCount: null,
+        testsCovered: [],
+        integrationPoints: []
+      };
+    }
     
     // Add PR labels
     await github.rest.issues.addLabels({

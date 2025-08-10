@@ -132,7 +132,18 @@ module.exports = async ({ github, context }) => {
       pr_number: null,
       created_at: new Date().toISOString(),
       completed_at: null,
-      error_message: null
+      error_message: null,
+      // ENHANCED: Implementation tracking for better context
+      implementation: {
+        filesCreated: [],
+        filesModified: [],
+        functionalityImplemented: [],
+        dependencies: index > 0 ? [`task-${index}`] : [], // Depends on previous task
+        implementationSummary: null,
+        codeChangesCount: null,
+        testsCovered: [],
+        integrationPoints: []
+      }
     })),
     current_task_index: 0,
     previous_branch: 'main',

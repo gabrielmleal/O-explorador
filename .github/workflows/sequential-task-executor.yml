@@ -223,25 +223,55 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           custom_instructions: |
-            **TASK**: ${{ steps.prepare-task.outputs.task_title }}
+            **🎯 SEQUENTIAL TASK IMPLEMENTATION**
             
-            **CRITICAL - BRANCH REQUIREMENTS**: 
-            - You are currently on branch `${{ steps.prepare-task.outputs.current_branch }}`
+            **CRITICAL: READ CONTEXT FILE FIRST**
+            - **MUST READ**: `current-task-context.json` contains essential information about previous implementations
+            - This file tells you exactly what previous tasks implemented so you DON'T re-implement them
+            - It contains the scope boundary for your current task
+            
+            **CURRENT TASK**: ${{ steps.prepare-task.outputs.task_title }}
+            **Task Number**: ${{ steps.prepare-task.outputs.task_number }} of ${{ steps.prepare-task.outputs.total_tasks }}
+            
+            **🚨 CRITICAL - IMPLEMENTATION SCOPE**:
+            - **ONLY IMPLEMENT** the functionality described in your current task title
+            - **DO NOT re-implement** features that previous tasks already completed
+            - **BUILD UPON** existing code from previous tasks, don't replace it
+            - **CHECK** the context file to see what files were already modified by previous tasks
+            
+            **🌿 BRANCH REQUIREMENTS**: 
+            - You are on branch `${{ steps.prepare-task.outputs.current_branch }}`
             - DO NOT create a new branch - work on the current branch only
-            - DO NOT switch branches - stay on `${{ steps.prepare-task.outputs.current_branch }}`
-            - This branch contains changes from previous sequential tasks - build upon them
+            - This branch contains accumulated changes from ALL previous sequential tasks
+            - Your changes will be added to this accumulated codebase
             
-            **IMPLEMENTATION REQUIRED**: Create actual working code, files, and implementations - not task descriptions or documentation.
+            **📋 IMPLEMENTATION STEPS**:
+            1. **READ** `current-task-context.json` to understand:
+               - What previous tasks implemented
+               - Which files were modified by previous tasks  
+               - Your specific implementation scope
+               - The implementation strategy for your task
             
-            **SPECIFIC INSTRUCTIONS**:
-            - Examine the existing codebase to understand the project structure
-            - Implement the specific functionality described in the task title
-            - Create or modify all necessary files
-            - Follow existing code patterns and conventions
-            - Ensure all code is functional and production-ready
-            - Build upon any existing implementations from previous tasks
+            2. **EXAMINE** existing codebase to see previous implementations
+               - Look at files listed in context.modifiedFiles
+               - Understand how previous tasks built the foundation
+               
+            3. **IMPLEMENT ONLY YOUR TASK**:
+               - Follow the scope boundary in context.implementationStrategy.scopeBoundary
+               - Create actual working code, not documentation
+               - Build incrementally on previous work
+               - Don't duplicate existing functionality
             
-            **CONTEXT**: This is task ${{ steps.prepare-task.outputs.task_number }} of ${{ steps.prepare-task.outputs.total_tasks }} in a sequential implementation. Previous tasks have already made changes to this codebase - enhance and build upon them.
+            4. **ENSURE INTEGRATION**:
+               - Your implementation should integrate with previous tasks
+               - Follow existing code patterns and conventions
+               - Make sure all code is production-ready
+            
+            **⚠️ AVOID THESE MISTAKES**:
+            - Re-implementing features from previous tasks
+            - Creating duplicate functionality
+            - Ignoring the context file information
+            - Starting from scratch when you should build incrementally
           timeout_minutes: 30
           allowed_tools: "Read,Write,Edit,MultiEdit,Glob,Grep,Bash(git *),Bash(npm *),Bash(yarn *),Bash(node *),Bash(python *),Bash(pip *)"
           disallowed_tools: "Bash(rm *),Bash(sudo *),Bash(curl *),Bash(wget *),Bash(dd *)"
