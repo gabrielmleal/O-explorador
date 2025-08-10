@@ -1,0 +1,60 @@
+{
+  "currentTask": {
+    "taskNumber": 4,
+    "title": "Integrate teleportation effects with player actions",
+    "description": "Complete the teleportation system by integrating the visual effects with the teleportation action. Update the Jogador class to trigger smoke effects at the current position before teleporting, then show arrival effects at the destination. Ensure the teleportation works smoothly with other player actions and doesn't conflict with existing movement, jumping, or combat systems.",
+    "branch": "sequential/issue-114/task-4",
+    "previousBranch": "claude/issue-114-20250810-2315"
+  },
+  "sequentialExecution": {
+    "totalTasks": 4,
+    "currentTaskIndex": 3,
+    "originalContext": "## 📋 Project Context for Sequential Implementation\n\n### Overview\n<!-- Provide a high-level description of what needs to be built or accomplished -->\nThe player will be capable of teleporting when pressing V. An smoke effect can happen in the location the player disappeared, and in the location the player appeared. The teleportation should send the player in the direction it is looking in a distance of 300 pixels.\n\n### Detailed Requirements\n<!-- List specific requirements, features, or functionality needed -->\n<!-- Note: These will be implemented sequentially, with each task building on the previous -->\n\n1. Create the command to teleport by pressing V, sending the player 300 pixels to the direction it is looking\n2. Add the proper effects (it can be the exactly same effect from when the wolves are killed) where the player disappears and appear\n3. The player SHOULD NOT pass through tiles that it collides, so if the destination position of the teleport makes the player inside a tile that it collides and should not pass, then the teleportation is done until the maximum position the player can go before colliding the tile\n\n### Technical Specifications\n<!-- Include any technical details, constraints, or preferences -->\n\n- **Technology Stack: **\n- **Architecture Pattern:**\n- **Performance Requirements:**\n- **Security Requirements:**\n\n### Sequential Implementation Considerations\n<!-- How should tasks build on each other? -->\n\n- **Task Dependencies:** <!-- Which tasks depend on others? -->\n- **Logical Ordering:** <!-- What's the best sequence for implementation? -->\n- **Integration Points:** <!-- Where do tasks need to integrate with each other? -->\n\n### User Stories\n<!-- Optional: Include user stories if applicable -->\n\nAs a [user type], I want to [action] so that [benefit].\n\n### Success Criteria\n<!-- Define what success looks like for this project -->\n\n- When the user press V, then it is teleported succesfully to destination with a visual effect\n- If the user would be teleported to inside a tile where it cannot go, then it is teleported until the maximum path it would be able to go before hitting the tile\n\n### Constraints and Assumptions\n<!-- List any constraints, limitations, or assumptions -->\n\n**Constraints:**\n- \n\n**Assumptions:**\n- \n\n### Dependencies\n<!-- List any external dependencies or prerequisites -->\n\n- \n\n### Timeline\n<!-- Optional: Include any timeline or deadline information -->\n\n- **Desired Completion Date:**\n- **Priority Level:** [Low/Medium/High/Critical]\n\n### Additional Context\n<!-- Any other relevant information, mockups, or references -->\n\n\n---\n\n## 🔗 Sequential Execution Settings\n\n### Task Generation Preferences\n<!-- Configure how sequential tasks should be generated -->\n\n- **Maximum number of tasks:** 10\n- **Preferred task complexity:** [Low/Medium/High/Mixed]\n- **Sequential execution:** Yes (default)\n- **Task interdependencies:** Consider dependencies in ordering\n\n### Implementation Strategy\n<!-- Configure how sequential PRs should be created -->\n\n- **Stacked PRs:** Yes (each task builds on previous)\n- **Base branch strategy:** Previous task branch\n- **Create draft PRs:** No\n- **Request reviews from:** @username\n\n### Progress Monitoring\n<!-- Sequential execution provides enhanced monitoring -->\n\n- **Progress tracking:** Enabled (automatic)\n- **Parent issue updates:** Yes\n- **Recovery support:** Available via workflows\n\n### Labels to Apply\n<!-- Additional labels to apply to generated tasks -->\n\n- \n\n---\n\n## 🚀 How Sequential Execution Works\n\n**Note:** Once this issue is created with the `sequential-context` label, it will automatically:\n\n1. **Analyze Context:** Claude decomposes requirements into sequential tasks\n2. **Initialize State:** Creates state management for task chain tracking\n3. **Execute Sequentially:** Tasks run one at a time, each building on previous changes\n4. **Create Stacked PRs:** Each task creates a PR that branches from the previous task\n5. **Auto-Chain:** Next task automatically triggers when current task completes\n6. **Progress Updates:** Regular progress updates posted to this issue\n\n### Key Benefits:\n- ✅ **Progressive Building:** Each task has access to previous implementations\n- ✅ **Stacked PRs:** Clean, focused PRs that show incremental progress  \n- ✅ **Automatic Chaining:** No manual intervention needed between tasks\n- ✅ **Error Recovery:** Built-in recovery workflows for handling failures\n- ✅ **Full Context:** Later tasks understand and integrate with earlier work\n\n### Monitoring Progress:\n- Progress updates will appear in comments below\n- Each task will create a labeled PR (sequential-task, task-N)\n- Final summary posted when all tasks complete\n- Recovery workflows available if issues occur\n\n**Sequential execution is now starting...**\n\n@claude please, execute this context",
+    "isFirstTask": false,
+    "isLastTask": true
+  },
+  "previousImplementations": [
+    {
+      "taskNumber": 1,
+      "title": "Add teleportation action and V key input handling",
+      "description": "Implement the core teleportation functionality in the Jogador class by adding a teleportation method and teleportation state tracking. Update the Estado_Level1 class to handle V key press events that trigger the teleportation action. The teleportation should move the player 300 pixels in the direction they are facing (using the olhandoDireita boolean to determine direction).",
+      "status": "completed",
+      "branch": "sequential/issue-114/task-1",
+      "completedAt": "2025-08-10T23:11:09.591Z"
+    },
+    {
+      "taskNumber": 2,
+      "title": "Implement collision-aware teleportation logic",
+      "description": "Enhance the teleportation method to include collision detection with map tiles. Use the existing collision detection system (calculaLimites and tile checking methods from ObjetoMapa) to ensure the player cannot teleport into blocked tiles. If the destination would place the player inside a blocked tile, find the maximum safe distance the player can travel in that direction before hitting the obstacle.",
+      "status": "completed",
+      "branch": "sequential/issue-114/task-2",
+      "completedAt": "2025-08-10T23:15:28.595Z"
+    },
+    {
+      "taskNumber": 3,
+      "title": "Create teleportation smoke effects",
+      "description": "Create a new TeleportEffect class based on the existing Explosao effect system to display smoke effects at teleportation locations. The effect should use the same visual approach as the wolf death explosion but may use different sprites or timing. Integrate these effects into the Estado_Level1 class to show effects at both the departure and arrival positions during teleportation.",
+      "status": "completed",
+      "branch": "sequential/issue-114/task-3",
+      "completedAt": "2025-08-10T23:18:55.694Z"
+    }
+  ],
+  "modifiedFiles": [
+    "src/GerenciadorDeEstados/Estado_Level1.java",
+    "src/ObjetosDoMapa/Jogador.java",
+    "src/ObjetosDoMapa/TeleportEffect.java"
+  ],
+  "implementationStrategy": {
+    "buildOnPrevious": true,
+    "implementOnlyCurrentTask": true,
+    "avoidReDevelopment": true,
+    "scopeBoundary": "Implement only the functionality described in \"Integrate teleportation effects with player actions\" - do NOT re-implement features from previous tasks"
+  },
+  "metadata": {
+    "parentIssue": 114,
+    "stateCommentId": 3172955017,
+    "createdAt": "2025-08-10T23:19:10.164Z",
+    "taskBranch": "sequential/issue-114/task-4",
+    "baseBranch": "claude/issue-114-20250810-2315"
+  }
+}
