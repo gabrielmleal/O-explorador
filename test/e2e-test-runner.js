@@ -67,7 +67,9 @@ Create a simple web application with user authentication and basic CRUD operatio
 
 ### Labels to Apply
 - e2e-test
-- sequential-task-test`
+- sequential-task-test
+
+@claude Please implement the above requirements using the sequential task system.`
   },
   'single-task': {
     title: '[SEQUENTIAL] E2E Test: Single Task Implementation',
@@ -88,7 +90,9 @@ Create a simple "Hello World" web server to test single-task sequential executio
 - [ ] Server responds to HTTP requests
 
 ### Timeline
-- **Priority Level:** Low (Test execution)`
+- **Priority Level:** Low (Test execution)
+
+@claude Please implement the above requirements using the sequential task system.`
   },
   'error-recovery': {
     title: '[SEQUENTIAL] E2E Test: Error Recovery Scenario',
@@ -110,7 +114,9 @@ Test error recovery capabilities with intentionally problematic requirements.
 - [ ] Error recovery works correctly
 
 ### Timeline
-- **Priority Level:** Medium (Test execution)`
+- **Priority Level:** Medium (Test execution)
+
+@claude Please implement the above requirements using the sequential task system.`
   }
 };
 

@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     if: |
       github.event_name == 'workflow_dispatch' || 
-      (github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'sequential-context'))
+      (github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'sequential-context') && contains(github.event.issue.body, '@claude'))
     
     permissions:
       contents: write

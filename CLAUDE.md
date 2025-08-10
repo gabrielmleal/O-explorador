@@ -342,3 +342,4 @@ try {
 ### Testing Guidelines
 - ONLY CHANGE TESTS if you're absolutely sure the problem is in the test and not in the workflow
 - Validate workflow changes with real sequential execution before considering them complete
+- You should make sure that ANY comment or issue should EXPLICITLY have "@claude" when the claude code github action should be invoked

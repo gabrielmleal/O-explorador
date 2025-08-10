@@ -195,7 +195,7 @@ ${'---'}
 
 🚀 **Sequential Task Execution Started**
 
-Starting execution of Task 1 of ${tasksData.tasks.length}. This comment was automatically posted by the Sequential Task Setup system to trigger the first task.
+@claude Starting execution of Task 1 of ${tasksData.tasks.length}. This comment was automatically posted by the Sequential Task Setup system to trigger the first task.
 
 **Task 1**: ${tasksData.tasks[0]?.title || 'Task title not available'}
 

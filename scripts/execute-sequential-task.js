@@ -524,7 +524,7 @@ async function triggerNextTask(github, context, nextTaskIndex, previousBranch, w
 
 ⚡ **Sequential Task ${nextTaskIndex + 1} Starting**
 
-Task ${nextTaskIndex} completed successfully. Automatically triggering next task in sequence.
+@claude Task ${nextTaskIndex} completed successfully. Automatically triggering next task in sequence.
 
 **Next Task (${nextTaskIndex + 1})**: ${taskTitle || 'Task title not available'}
 

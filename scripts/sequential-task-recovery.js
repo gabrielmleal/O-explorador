@@ -215,7 +215,7 @@ async function recoverSequentialExecution({ github, context, core, resumeFromTas
 
 🔄 **Sequential Task Recovery Started**
 
-Manually resuming sequential execution from Task ${resumeTaskIndex + 1} due to recovery operation.
+@claude Manually resuming sequential execution from Task ${resumeTaskIndex + 1} due to recovery operation.
 
 **Resuming Task (${resumeTaskIndex + 1})**: ${resumeTask.title}
 
