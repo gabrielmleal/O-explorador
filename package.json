@@ -1,0 +1,30 @@
+{
+  "name": "explorador-web-app",
+  "version": "1.0.0",
+  "description": "Simple web application with user authentication and CRUD operations",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "nodemon app.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "express-session": "^1.17.3",
+    "bcryptjs": "^2.4.3",
+    "body-parser": "^1.20.2",
+    "path": "^0.12.7"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "keywords": [
+    "web",
+    "authentication",
+    "crud",
+    "express",
+    "mvc"
+  ],
+  "author": "Sequential Task System",
+  "license": "MIT"
+}
