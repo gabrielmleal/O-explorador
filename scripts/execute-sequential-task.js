@@ -376,9 +376,8 @@ module.exports.handleTaskCompletion = async ({ github, context, core, taskContex
   
   const taskData = taskContext.taskData;
   
-  // First, detect if Claude created its own branch instead of using ours
+  // Detect if Claude created its own branch and use it directly
   let actualBranch = currentBranch;
-  let needsBranchMerge = false;
   
   try {
     // Check if Claude created a branch with pattern claude/issue-{parentIssue}-*
@@ -396,82 +395,75 @@ module.exports.handleTaskCompletion = async ({ github, context, core, taskContex
     console.log(`🔍 Found Claude branches: ${JSON.stringify(claudeBranches)}`);
     
     if (claudeBranches.length > 0) {
-      // Use the most recent Claude branch
+      // Use Claude's branch directly for PR
       const claudeBranch = claudeBranches[0];
-      console.log(`⚠️ Claude created its own branch: ${claudeBranch}`);
-      console.log(`🔄 Need to merge changes from ${claudeBranch} to ${currentBranch}`);
+      console.log(`✅ Claude created its own branch: ${claudeBranch}`);
+      console.log(`🎯 Using Claude's branch directly for PR (no merging needed)`);
       
-      // Fetch the Claude branch and merge its changes
+      // Verify Claude's branch has changes
       try {
-        execSync(`git fetch origin ${claudeBranch}`);
-        
-        // Check if Claude's branch has changes compared to current branch
-        const comparison = execSync(`git rev-list --count ${currentBranch}..origin/${claudeBranch}`, { encoding: 'utf8' }).trim();
+        const comparison = execSync(`git rev-list --count main..origin/${claudeBranch}`, { encoding: 'utf8' }).trim();
         const commitsAhead = parseInt(comparison);
         
         if (commitsAhead > 0) {
-          console.log(`📊 Claude's branch has ${commitsAhead} commits ahead of sequential branch`);
-          
-          // Merge Claude's changes into our sequential branch
-          console.log(`🔀 Merging changes from origin/${claudeBranch} into ${currentBranch}`);
-          execSync(`git merge origin/${claudeBranch} --no-edit -m "Merge Claude's changes from ${claudeBranch} into sequential task branch"`);
-          
-          actualBranch = currentBranch; // We're using our branch with Claude's changes merged
-          needsBranchMerge = false; // Already merged
-          console.log(`✅ Successfully merged Claude's changes into ${currentBranch}`);
+          console.log(`📊 Claude's branch has ${commitsAhead} commits ahead of main - perfect!`);
+          actualBranch = claudeBranch;
         } else {
-          console.log(`ℹ️ Claude's branch has no additional commits`);
+          console.log(`⚠️ Claude's branch has no commits ahead of main, using sequential branch`);
         }
-        
-      } catch (mergeError) {
-        console.log(`❌ Failed to merge Claude's branch: ${mergeError.message}`);
-        console.log(`🔄 Will use Claude's branch directly for PR: ${claudeBranch}`);
+      } catch (comparisonError) {
+        console.log(`⚠️ Could not compare branches, using Claude's branch anyway: ${claudeBranch}`);
         actualBranch = claudeBranch;
-        needsBranchMerge = true;
       }
     } else {
-      console.log(`✅ No Claude-specific branch found - Claude worked on our branch: ${currentBranch}`);
+      console.log(`✅ No Claude-specific branch found - Claude worked on sequential branch: ${currentBranch}`);
     }
     
   } catch (error) {
     console.log(`⚠️ Branch detection failed: ${error.message}`);
-    console.log(`🔄 Continuing with original branch: ${currentBranch}`);
+    console.log(`🔄 Using sequential branch: ${currentBranch}`);
   }
   
   // Update context with actual branch being used
   if (actualBranch !== currentBranch) {
     taskContext.currentBranch = actualBranch;
-    console.log(`📝 Updated task context to use actual branch: ${actualBranch}`);
+    console.log(`📝 Using branch: ${actualBranch} (Claude's branch)`);
+  } else {
+    console.log(`📝 Using branch: ${actualBranch} (sequential branch)`);
   }
   
-  // Check if any files were modified on the actual branch
-  const status = execSync('git status --porcelain', { encoding: 'utf8' });
-  if (!status.trim() && !needsBranchMerge) {
-    console.log('⚠️ No changes made for this task');
-    
-    // Update task status
-    sequentialState.tasks[taskIndex].status = 'no-changes';
-    sequentialState.tasks[taskIndex].completed_at = new Date().toISOString();
-    sequentialState.updated_at = new Date().toISOString();
-    
-    try {
-      await updateStateComment(github, context.repo.owner, context.repo.repo, taskContext.parentIssue, sequentialState, stateCommentId);
-    } catch (error) {
-      console.log('Failed to update no-changes state:', error.message);
+  // Check if we're using Claude's branch (which already has changes) or need to check working directory
+  if (actualBranch !== currentBranch) {
+    // Using Claude's branch - changes are already committed and pushed by Claude
+    console.log(`✅ Using Claude's branch with changes already committed and pushed`);
+  } else {
+    // Using sequential branch - check if any files were modified
+    const status = execSync('git status --porcelain', { encoding: 'utf8' });
+    if (!status.trim()) {
+      console.log('⚠️ No changes made for this task');
+      
+      // Update task status
+      sequentialState.tasks[taskIndex].status = 'no-changes';
+      sequentialState.tasks[taskIndex].completed_at = new Date().toISOString();
+      sequentialState.updated_at = new Date().toISOString();
+      
+      try {
+        await updateStateComment(github, context.repo.owner, context.repo.repo, taskContext.parentIssue, sequentialState, stateCommentId);
+      } catch (error) {
+        console.log('Failed to update no-changes state:', error.message);
+      }
+      
+      // Still trigger next task
+      const nextTaskIndex = taskIndex + 1;
+      if (nextTaskIndex < sequentialState.tasks.length) {
+        const nextTaskTitle = sequentialState.tasks[nextTaskIndex]?.title;
+        await triggerNextTask(github, context, nextTaskIndex, actualBranch, workflowToken, taskContext.parentIssue, nextTaskTitle);
+      }
+      
+      return { status: 'no-changes', prNumber: null };
     }
-    
-    // Still trigger next task
-    const nextTaskIndex = taskIndex + 1;
-    if (nextTaskIndex < sequentialState.tasks.length) {
-      const nextTaskTitle = sequentialState.tasks[nextTaskIndex]?.title;
-      await triggerNextTask(github, context, nextTaskIndex, actualBranch, workflowToken, taskContext.parentIssue, nextTaskTitle);
-    }
-    
-    return { status: 'no-changes', prNumber: null };
-  }
 
-  // Only commit and push if we're on our sequential branch (not Claude's branch)
-  if (actualBranch === currentBranch && !needsBranchMerge) {
+    // Commit and push changes on sequential branch
     console.log('💾 Committing changes to sequential branch...');
     
     // Commit changes
@@ -513,9 +505,10 @@ Co-authored-by: Claude <claude@anthropic.com>"`);
       const cleanRepoUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}.git`;
       execSync(`git remote set-url origin ${cleanRepoUrl}`);
     }
-  } else {
-    console.log('ℹ️ Using Claude\'s branch - no need to commit/push separately');
   }
+
+  // At this point, actualBranch has the changes (either Claude's branch or committed sequential branch)
+  console.log(`✅ Branch ${actualBranch} ready for PR creation`);
 
   // Create PR to previous branch (or main for first task)
   const baseBranch = previousBranch;
