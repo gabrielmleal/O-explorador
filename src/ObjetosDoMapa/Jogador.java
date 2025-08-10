@@ -11,6 +11,7 @@ package ObjetosDoMapa;
  * @author Gabriel
  */
 import ElementosGraficos.Animacao;
+import ElementosGraficos.Bloco;
 import ElementosGraficos.MapaDeBlocos;
 import java.awt.Color;
 import java.awt.Font;
@@ -32,7 +33,7 @@ public class Jogador extends ObjetoMapa {
     private boolean puloDuploUsado;
     
     //Atributos de ataques e ações do jogador
-    private boolean atirando, atirou, atacando, correndo, terminando;
+    private boolean atirando, atirou, atacando, correndo, terminando, teleportando;
     private double atacaAlcance;
     private ArrayList<Flecha> flechas;
     
@@ -127,6 +128,93 @@ public class Jogador extends ObjetoMapa {
     public void resetarPuloDuplo(){
         podeUsarPuloDuplo = false;
         puloDuploUsado = false;
+    }
+    
+    public void teleporta(){
+        if(!atacando && !atirando && !teleportando){
+            teleportando = true;
+            realizaTeleporteComColisao();
+        }
+    }
+    
+    private void realizaTeleporteComColisao(){
+        double destinoX = x;
+        double destinoY = y;
+        
+        // Calcula a posição de destino baseada na direção
+        if(olhandoDireita){
+            destinoX = x + 300;
+        } else {
+            destinoX = x - 300;
+        }
+        
+        // Encontra a posição máxima segura para teleportar
+        double posicaoSegura = encontrarPosicaoSegura(x, destinoX, y);
+        
+        // Move o jogador para a posição segura
+        mudarPosicaoPara(posicaoSegura, destinoY);
+        teleportando = false;
+    }
+    
+    private double encontrarPosicaoSegura(double pontoInicial, double pontoDestino, double yPos){
+        // Se o destino está na mesma posição, retorna a posição atual
+        if(pontoInicial == pontoDestino) return pontoInicial;
+        
+        boolean movindoDireita = pontoDestino > pontoInicial;
+        double distanciaTotal = Math.abs(pontoDestino - pontoInicial);
+        int incrementos = 10; // Divide o movimento em 10 incrementos para verificar colisões
+        double incremento = distanciaTotal / incrementos;
+        
+        if(!movindoDireita) incremento = -incremento;
+        
+        double posicaoAtual = pontoInicial;
+        
+        // Testa cada incremento para encontrar a posição máxima antes da colisão
+        for(int i = 1; i <= incrementos; i++){
+            double novaPosicao = pontoInicial + (incremento * i);
+            
+            // Verifica se há colisão na nova posição
+            if(verificarColisaoNaPosicao(novaPosicao, yPos)){
+                // Se há colisão, retorna a última posição válida
+                return posicaoAtual;
+            }
+            
+            posicaoAtual = novaPosicao;
+        }
+        
+        // Se não há colisões, retorna o destino original
+        return pontoDestino;
+    }
+    
+    private boolean verificarColisaoNaPosicao(double novaX, double novaY){
+        // Usa o sistema de colisão existente para verificar se a posição é válida
+        int blocoEsquerda = (int)(novaX - clargura / 2) / tamanhoBloco;
+        int blocoDireita = (int)(novaX + clargura / 2 - 1) / tamanhoBloco;
+        int blocoCima = (int)(novaY - caltura / 2) / tamanhoBloco;
+        int blocoBaixo = (int)(novaY + caltura / 2 - 1) / tamanhoBloco;
+        
+        // Verifica se está fora dos limites do mapa
+        if(blocoEsquerda < 0 || blocoDireita >= mb.qualNumDeCols() || 
+           blocoCima < 0 || blocoBaixo >= mb.qualNumDeLinhas()){
+            return true; // Considera como colisão se estiver fora do mapa
+        }
+        
+        // Verifica os blocos ao redor da nova posição
+        try {
+            int superiorEsquerdo = mb.qualTipo(blocoCima, blocoEsquerda);
+            int superiorDireito = mb.qualTipo(blocoCima, blocoDireita);
+            int inferiorEsquerdo = mb.qualTipo(blocoBaixo, blocoEsquerda);
+            int inferiorDireito = mb.qualTipo(blocoBaixo, blocoDireita);
+            
+            // Se qualquer um dos blocos é bloqueado, há colisão
+            return (superiorEsquerdo == Bloco.BLOQUEADO ||
+                    superiorDireito == Bloco.BLOQUEADO ||
+                    inferiorEsquerdo == Bloco.BLOQUEADO ||
+                    inferiorDireito == Bloco.BLOQUEADO);
+        } catch (Exception e) {
+            // Em caso de erro, considera como colisão para segurança
+            return true;
+        }
     }
     
     @Override
