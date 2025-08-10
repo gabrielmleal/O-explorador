@@ -166,6 +166,10 @@ ${'---'}
   execSync('git config user.name "Claude Sequential Bot"');
   execSync('git config user.email "claude-sequential@anthropic.com"');
 
+  // Create new branch for current task
+  const taskBranch = currentTask.branch;
+  console.log(`🌿 Creating task branch: ${taskBranch}`);
+
   // Prepare sequential branch with accumulated changes from previous tasks
   console.log(`🔧 Preparing sequential branch with changes from: ${previousBranch}`);
   try {
@@ -226,10 +230,6 @@ ${'---'}
     console.log('⚠️ Falling back to main branch');
     execSync('git checkout main || git checkout -b main');
   }
-
-  // Create new branch for current task
-  const taskBranch = currentTask.branch;
-  console.log(`🌿 Creating task branch: ${taskBranch}`);
   
   try {
     console.log(`🔧 Git configuration check`);
