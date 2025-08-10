@@ -188,29 +188,30 @@ ${'---'}
     throw new Error('Parent issue required for state storage');
   }
 
-  // Trigger first task execution using repository dispatch
-  if (workflowToken) {
-    try {
-      await github.rest.repos.createDispatchEvent({
-        owner: context.repo.owner,
-        repo: context.repo.repo,
-        event_type: 'execute-sequential-task',
-        client_payload: {
-          task_index: 0,
-          previous_branch: 'main',
-          trigger_source: 'sequential_setup',
-          parent_issue: parentIssue
-        }
-      });
-      
-      console.log('🚀 Successfully triggered first task execution');
-    } catch (error) {
-      console.log('❌ Failed to trigger first task execution:', error.message);
-      throw new Error('Could not start sequential task execution');
-    }
-  } else {
-    console.log('⚠️ WORKFLOW_TRIGGER_TOKEN not available - cannot trigger first task');
-    throw new Error('WORKFLOW_TRIGGER_TOKEN required for sequential execution');
+  // Trigger first task execution using issue comment
+  try {
+    // Create a sequential task trigger comment
+    const triggerComment = `[SEQUENTIAL-TASK-TRIGGER] task_index=0 previous_branch=main parent_issue=${parentIssue}
+
+🚀 **Sequential Task Execution Started**
+
+Starting execution of Task 1 of ${tasksData.tasks.length}. This comment was automatically posted by the Sequential Task Setup system to trigger the first task.
+
+**Task 1**: ${tasksData.tasks[0]?.title || 'Task title not available'}
+
+*This is an automated trigger comment - the sequential workflow will now execute the first task.*`;
+
+    await github.rest.issues.createComment({
+      owner: context.repo.owner,
+      repo: context.repo.repo,
+      issue_number: parentIssue,
+      body: triggerComment
+    });
+    
+    console.log('🚀 Successfully triggered first task execution via comment');
+  } catch (error) {
+    console.log('❌ Failed to trigger first task execution:', error.message);
+    throw new Error('Could not start sequential task execution');
   }
 
   return {

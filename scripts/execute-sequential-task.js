@@ -376,7 +376,8 @@ module.exports.handleTaskCompletion = async ({ github, context, core, taskContex
     // Still trigger next task
     const nextTaskIndex = taskIndex + 1;
     if (nextTaskIndex < sequentialState.tasks.length) {
-      await triggerNextTask(github, context, nextTaskIndex, currentBranch, workflowToken, taskContext.parentIssue);
+      const nextTaskTitle = sequentialState.tasks[nextTaskIndex]?.title;
+      await triggerNextTask(github, context, nextTaskIndex, currentBranch, workflowToken, taskContext.parentIssue, nextTaskTitle);
     }
     
     return { status: 'no-changes', prNumber: null };
@@ -492,7 +493,8 @@ ${sequentialState.parent_issue ? `\nRelated to: #${sequentialState.parent_issue}
         console.log('Failed to update completed state:', error.message);
       }
       
-      await triggerNextTask(github, context, nextTaskIndex, currentBranch, workflowToken, taskContext.parentIssue);
+      const nextTaskTitle = sequentialState.tasks[nextTaskIndex]?.title;
+      await triggerNextTask(github, context, nextTaskIndex, currentBranch, workflowToken, taskContext.parentIssue, nextTaskTitle);
       
       console.log(`🚀 Triggered next sequential task: ${nextTaskIndex + 1}`);
     } else {
@@ -527,24 +529,28 @@ ${sequentialState.parent_issue ? `\nRelated to: #${sequentialState.parent_issue}
   }
 };
 
-// Helper function to trigger next task
-async function triggerNextTask(github, context, nextTaskIndex, previousBranch, workflowToken, parentIssue) {
-  if (!workflowToken) {
-    throw new Error('WORKFLOW_TRIGGER_TOKEN required to trigger next task');
-  }
-
+// Helper function to trigger next task using issue comment
+async function triggerNextTask(github, context, nextTaskIndex, previousBranch, workflowToken, parentIssue, taskTitle) {
   try {
-    await github.rest.repos.createDispatchEvent({
+    // Create a sequential task trigger comment
+    const triggerComment = `[SEQUENTIAL-TASK-TRIGGER] task_index=${nextTaskIndex} previous_branch=${previousBranch} parent_issue=${parentIssue}
+
+⚡ **Sequential Task ${nextTaskIndex + 1} Starting**
+
+Task ${nextTaskIndex} completed successfully. Automatically triggering next task in sequence.
+
+**Next Task (${nextTaskIndex + 1})**: ${taskTitle || 'Task title not available'}
+
+*This is an automated trigger comment - the sequential workflow will now execute the next task.*`;
+
+    await github.rest.issues.createComment({
       owner: context.repo.owner,
       repo: context.repo.repo,
-      event_type: 'execute-sequential-task',
-      client_payload: {
-        task_index: nextTaskIndex,
-        previous_branch: previousBranch,
-        parent_issue: parentIssue,
-        trigger_source: 'sequential_task_completion'
-      }
+      issue_number: parentIssue,
+      body: triggerComment
     });
+    
+    console.log(`✅ Successfully triggered next task ${nextTaskIndex + 1} via comment`);
   } catch (error) {
     throw new Error(`Failed to trigger next task: ${error.message}`);
   }

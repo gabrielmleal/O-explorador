@@ -209,29 +209,34 @@ async function recoverSequentialExecution({ github, context, core, resumeFromTas
     console.log(`   - Previous branch: ${previousBranch}`);
     console.log(`   - Task status reset: ${resumeTask.title}`);
     
-    // Trigger task execution
-    const workflowToken = process.env.WORKFLOW_TRIGGER_TOKEN;
-    if (workflowToken) {
-      await github.rest.repos.createDispatchEvent({
+    // Trigger task execution using recovery comment
+    try {
+      const triggerComment = `[SEQUENTIAL-TASK-TRIGGER] task_index=${resumeTaskIndex} previous_branch=${previousBranch} parent_issue=${parentIssue}
+
+🔄 **Sequential Task Recovery Started**
+
+Manually resuming sequential execution from Task ${resumeTaskIndex + 1} due to recovery operation.
+
+**Resuming Task (${resumeTaskIndex + 1})**: ${resumeTask.title}
+
+*This is an automated recovery trigger comment - the sequential workflow will now execute the specified task.*`;
+
+      await github.rest.issues.createComment({
         owner: context.repo.owner,
         repo: context.repo.repo,
-        event_type: 'execute-sequential-task',
-        client_payload: {
-          task_index: resumeTaskIndex,
-          previous_branch: previousBranch,
-          parent_issue: parentIssue,
-          trigger_source: 'manual_recovery'
-        }
+        issue_number: parentIssue,
+        body: triggerComment
       });
       
-      console.log(`🚀 Triggered recovery execution for Task ${resumeTaskIndex + 1}`);
-    } else {
-      console.log('⚠️ WORKFLOW_TRIGGER_TOKEN not available - manual trigger required');
+      console.log(`🚀 Triggered recovery execution for Task ${resumeTaskIndex + 1} via comment`);
+    } catch (error) {
+      console.log('⚠️ Failed to trigger recovery execution:', error.message);
       return { 
         status: 'recovery_prepared', 
         resumeTaskIndex, 
         previousBranch, 
-        manualTriggerRequired: true 
+        manualTriggerRequired: true,
+        error: error.message
       };
     }
     
