@@ -325,3 +325,4 @@ try {
 - `scripts/setup-sequential-tasks.js`: Initial task setup and first trigger
 - `scripts/execute-sequential-task.js`: Task execution and next task triggering
 - `scripts/sequential-task-recovery.js`: Recovery operations with comment triggers
+- please, save how you should run gh commands, like this: bash -c 'unset GITHUB_TOKEN GITHUB_USER; gh auth status'
