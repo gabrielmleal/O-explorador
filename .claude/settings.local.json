@@ -7,7 +7,11 @@
       "WebFetch(domain:github.com)",
       "Bash(node:*)",
       "WebFetch(domain:deepwiki.com)",
-      "WebFetch(domain:docs.github.com)"
+      "WebFetch(domain:docs.github.com)",
+      "Bash(gh run list:*)",
+      "Bash(git fetch:*)",
+      "Bash(git branch:*)",
+      "Bash(gh issue view:*)"
     ],
     "deny": []
   }
