@@ -31,6 +31,8 @@ This is an automated sequential workflow system that uses Claude Code to decompo
    - Creates stacked PRs where each task builds on previous task's branch
    - **Claude Code Action Compatible**: Uses issue comment triggers instead of repository_dispatch
    - Automatic task coordination through structured comment triggers: `[SEQUENTIAL-TASK-TRIGGER]`
+   - **Advanced Branch Management**: Pre-merge strategy to prevent task overwrite issues
+   - **Change Accumulation**: Each task starts with all previous task implementations
    - Comprehensive error recovery and resume capabilities
 
 ## Development Guidelines
@@ -65,9 +67,33 @@ This is an automated sequential workflow system that uses Claude Code to decompo
 - Ensure Claude reads `current-task-context.json` for full sequential context
 - Use structured prompts for consistent results with explicit implementation goals
 - **Critical**: Instruct Claude to implement working code, not just task descriptions
+- **Branch Instructions**: Include explicit branch requirements to prevent branch creation
 - Request JSON output when parsing is needed for task decomposition
 - Include relevant context and previous task information in prompts
 - Set appropriate timeout limits for complex implementation tasks
+
+### Sequential Branch Management Strategy
+
+#### Pre-Merge Accumulation Process
+1. **Task Initialization**: Each task starts by creating `sequential/task-N` from main
+2. **Previous Changes Integration**: Merge all changes from `sequential/task-(N-1)`
+3. **Accumulated State**: Task N branch contains implementations from tasks 1 through N-1
+4. **Claude Execution**: Claude works on branch with all previous task changes
+5. **Change Consolidation**: If Claude creates own branch, merge back to sequential branch
+
+#### Branch Flow Examples
+```
+Task 1: main → sequential/task-1 → Claude changes → sequential/task-1 (final)
+Task 2: sequential/task-1 → sequential/task-2 → Claude changes → sequential/task-2 (has Task 1 + 2)
+Task 3: sequential/task-2 → sequential/task-3 → Claude changes → sequential/task-3 (has Task 1 + 2 + 3)
+```
+
+#### Claude Branch Detection and Handling
+- **Pattern Recognition**: Detects `claude/issue-{N}-{timestamp}` branches
+- **Automatic Merging**: Merges Claude's changes back to sequential branch
+- **Continuity Preservation**: Ensures next task gets all accumulated changes
+- **Fallback Strategy**: Uses Claude's branch directly if merge fails
+- **Anti-Overwrite Protection**: Each sequential branch contains accumulated changes from all previous tasks
 
 ## Implementation Standards
 
@@ -271,10 +297,12 @@ try {
 ## Version Control
 
 ### Branching Strategy
-- Main branch for stable code
-- Feature branches for new functionality
-- Fix branches for bug fixes
-- Use descriptive branch names
+- **Main branch**: Stable code and base for all sequential tasks
+- **Sequential branches**: Pattern `sequential/task-N` with accumulated changes from all previous tasks
+- **Claude branches**: Pattern `claude/issue-N-timestamp` created automatically by Claude Code Action
+- **Branch Continuity**: Pre-merge strategy ensures each task builds on all previous implementations
+- **Anti-Overwrite Protection**: Each sequential branch contains accumulated changes from tasks 1 through N-1
+- Use descriptive branch names for manual branches
 
 ### Commit Standards
 - Use conventional commit format
