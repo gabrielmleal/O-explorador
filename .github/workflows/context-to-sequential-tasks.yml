@@ -42,6 +42,8 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           timeout_minutes: 20
           custom_instructions: |
+            **CRITICAL**: You are ONLY responsible for task decomposition. DO NOT create any PRs, branches, or make git commits. ONLY create the tasks.json file.
+
             Create a file named `tasks.json` that breaks down the project requirement into 3-5 sequential implementation tasks.
 
             Project requirements:
@@ -59,12 +61,16 @@ jobs:
             }
             ```
 
-            Requirements:
+            **STRICT REQUIREMENTS**:
             - 3-5 tasks maximum
             - Tasks build sequentially on each other
             - Focus on actual implementation, not planning
             - Use specific, actionable titles
-          allowed_tools: "Write,Read,Edit"
+            - ONLY create the tasks.json file - DO NOT make any other changes
+            - DO NOT create pull requests or branches
+            - DO NOT commit any code changes
+          allowed_tools: "Write,Read"
+          disallowed_tools: "Bash,Edit,MultiEdit,Grep,Glob"
 
       - name: Verify Claude Code Action execution
         if: always()

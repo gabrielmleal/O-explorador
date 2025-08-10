@@ -176,27 +176,42 @@ ${'---'}
     if (previousBranch !== 'main') {
       try {
         // First check if branch exists remotely
-        const remoteBranchExists = execSync(`git ls-remote --heads origin ${previousBranch}`, { encoding: 'utf8' }).trim();
+        const remoteBranchCheck = execSync(`git ls-remote --heads origin ${previousBranch}`, { encoding: 'utf8' }).trim();
         
-        if (remoteBranchExists) {
-          execSync(`git checkout -b temp-prev origin/${previousBranch}`, { stdio: 'pipe' });
-          execSync(`git checkout ${previousBranch}`, { stdio: 'pipe' });
-          console.log(`✅ Checked out existing branch: ${previousBranch}`);
+        if (remoteBranchCheck) {
+          console.log(`🔍 Remote branch ${previousBranch} exists, checking out...`);
+          
+          // Delete local branch if it exists to avoid conflicts
+          try {
+            execSync(`git branch -D ${previousBranch}`, { stdio: 'pipe' });
+            console.log(`🗑️ Deleted existing local branch: ${previousBranch}`);
+          } catch (e) {
+            // Branch doesn't exist locally, that's fine
+          }
+          
+          // Checkout remote branch and create local tracking branch
+          execSync(`git checkout -b ${previousBranch} origin/${previousBranch}`);
+          console.log(`✅ Checked out and tracking remote branch: ${previousBranch}`);
         } else {
           console.log(`⚠️ Branch ${previousBranch} doesn't exist remotely, using main as base`);
           execSync('git checkout main');
+          execSync('git pull origin main');
         }
       } catch (error) {
-        // If branch doesn't exist remotely, create it locally
-        console.log(`⚠️ Branch ${previousBranch} doesn't exist remotely, using main as base`);
+        console.log(`❌ Error checking out branch ${previousBranch}:`, error.message);
+        console.log(`⚠️ Falling back to main branch`);
         execSync('git checkout main');
+        execSync('git pull origin main');
       }
     } else {
+      console.log(`🔄 Checking out main branch`);
       execSync('git checkout main');
+      execSync('git pull origin main');
     }
   } catch (error) {
-    console.log('⚠️ Warning: Could not checkout previous branch, using main:', error.message);
-    execSync('git checkout main');
+    console.log('❌ Critical error during branch checkout:', error.message);
+    console.log('⚠️ Falling back to main branch');
+    execSync('git checkout main || git checkout -b main');
   }
 
   // Create new branch for current task
@@ -342,7 +357,24 @@ module.exports.handleTaskCompletion = async ({ github, context, core, taskContex
     throw new Error(`Failed to load sequential state: ${error.message}`);
   }
 
-  const { taskIndex, currentBranch, previousBranch, taskData } = taskContext;
+  // Update task context with complete data from sequential state
+  const { taskIndex, currentBranch, previousBranch } = taskContext;
+  const currentTask = sequentialState.tasks[taskIndex];
+  
+  if (!currentTask) {
+    throw new Error(`Task at index ${taskIndex} not found in sequential state`);
+  }
+  
+  // Update task context with complete task data from state
+  taskContext.taskData = currentTask;
+  taskContext.previousTasks = sequentialState.tasks.slice(0, taskIndex);
+  taskContext.sequentialContext = sequentialState.context;
+  
+  console.log(`📋 Task context updated with complete data from state`);
+  console.log(`   - Task: ${currentTask.title}`);
+  console.log(`   - Previous tasks: ${taskContext.previousTasks.length}`);
+  
+  const taskData = taskContext.taskData;
   
   // Check if any files were modified
   const status = execSync('git status --porcelain', { encoding: 'utf8' });
@@ -519,6 +551,11 @@ ${sequentialState.parent_issue ? `\nRelated to: #${sequentialState.parent_issue}
 // Helper function to trigger next task using issue comment
 async function triggerNextTask(github, context, nextTaskIndex, previousBranch, workflowToken, parentIssue, taskTitle) {
   try {
+    console.log(`🚀 Triggering next task: ${nextTaskIndex + 1}`);
+    console.log(`   - Previous branch: ${previousBranch}`);
+    console.log(`   - Parent issue: ${parentIssue}`);
+    console.log(`   - Task title: ${taskTitle}`);
+    
     // Create a sequential task trigger comment
     const triggerComment = `[SEQUENTIAL-TASK-TRIGGER] task_index=${nextTaskIndex} previous_branch=${previousBranch} parent_issue=${parentIssue}
 
@@ -530,6 +567,7 @@ async function triggerNextTask(github, context, nextTaskIndex, previousBranch, w
 
 *This is an automated trigger comment - the sequential workflow will now execute the next task.*`;
 
+    console.log(`📝 Creating trigger comment for task ${nextTaskIndex + 1}...`);
     await github.rest.issues.createComment({
       owner: context.repo.owner,
       repo: context.repo.repo,
@@ -538,7 +576,9 @@ async function triggerNextTask(github, context, nextTaskIndex, previousBranch, w
     });
     
     console.log(`✅ Successfully triggered next task ${nextTaskIndex + 1} via comment`);
+    console.log(`🔍 The sequential-task-executor workflow should now pick up this trigger`);
   } catch (error) {
+    console.log(`❌ Failed to trigger next task ${nextTaskIndex + 1}:`, error.message);
     throw new Error(`Failed to trigger next task: ${error.message}`);
   }
 }

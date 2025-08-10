@@ -269,7 +269,7 @@ jobs:
           fi
 
       - name: Handle sequential task completion
-        if: always() && steps.prepare-task.outputs.task_prepared == 'true'
+        if: steps.prepare-task.outputs.task_prepared == 'true' && steps.claude-implementation.outcome == 'success'
         uses: actions/github-script@v7
         env:
           WORKFLOW_TRIGGER_TOKEN: ${{ secrets.WORKFLOW_TRIGGER_TOKEN }}
@@ -292,26 +292,33 @@ jobs:
               
               console.log(`📋 Processing completion for Task ${taskIndex + 1}: ${taskTitle}`);
               
-              // Create minimal task context for completion handler
+              // Create complete task context for completion handler
               const taskContext = {
                 taskIndex: taskIndex,
                 totalTasks: totalTasks,
-                taskData: { title: taskTitle },
+                taskData: { title: taskTitle, body: `Task ${taskIndex + 1} implementation` },
                 currentBranch: currentBranch,
                 previousBranch: previousBranch,
-                parentIssue: parentIssue
+                parentIssue: parentIssue,
+                previousTasks: [] // This will be populated by the handler from state
               };
               
-              // Import the task completion handler
-              const executeSequentialTask = require(path.join(process.cwd(), 'scripts', 'execute-sequential-task.js'));
+              console.log('🔧 Importing task completion handler...');
               
-              // Handle task completion (PR creation and next task triggering)
-              const result = await executeSequentialTask.handleTaskCompletion({ 
+              // Import the completion handler module directly
+              const taskModule = require(path.join(process.cwd(), 'scripts', 'execute-sequential-task.js'));
+              
+              // Call the completion handler function
+              console.log('🚀 Calling handleTaskCompletion...');
+              const result = await taskModule.handleTaskCompletion({ 
                 github, 
                 context, 
                 core, 
                 taskContext 
               });
+              
+              console.log('✅ Task completion handler executed successfully');
+              console.log(`📋 Result: ${JSON.stringify(result)}`);
               
               if (result.status === 'completed') {
                 console.log(`✅ Task ${taskContext.taskIndex + 1} completed successfully`);
@@ -334,7 +341,31 @@ jobs:
               
             } catch (error) {
               console.log('❌ Sequential task completion handling failed:', error.message);
-              console.log('🔍 Full error:', error);
+              console.log('🔍 Full error details:', error);
+              console.log('🔍 Stack trace:', error.stack);
+              
+              // Post error comment to parent issue for debugging
+              try {
+                const parentIssue = parseInt('${{ steps.parse-trigger.outputs.parent_issue }}');
+                if (parentIssue) {
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: parentIssue,
+                    body: `## ❌ Task Completion Error
+              
+              **Task**: ${{ steps.prepare-task.outputs.task_title }}
+              **Error**: ${error.message}
+              
+              The task implementation completed but post-processing failed. Please check the workflow logs for details.
+              
+              *This error occurred during sequential task completion handling.*`
+                  });
+                }
+              } catch (commentError) {
+                console.log('⚠️ Could not post error comment:', commentError.message);
+              }
+              
               core.setFailed(`Task completion failed: ${error.message}`);
             }
 
