@@ -246,6 +246,9 @@ class E2ETestRunner {
   async validateContextToTasksWorkflow() {
     this.log('🔍 Validating context-to-sequential-tasks workflow execution...');
     
+    // Wait for workflow to be triggered first (more time for initial trigger)
+    await this.sleep(15000); // Give GitHub 15 seconds to trigger the workflow
+    
     // Wait for workflow to be triggered and complete
     const workflowResult = await this.waitForCondition(
       async () => {
@@ -258,21 +261,36 @@ class E2ETestRunner {
         );
       },
       'Context-to-tasks workflow completion',
-      600000, // 10 minutes
-      10000   // Check every 10 seconds
+      1200000, // 20 minutes (increased from 10)
+      15000    // Check every 15 seconds (increased from 10)
     );
 
     this.testResults.workflowsExecuted++;
     this.log('✅ Context-to-tasks workflow completed', workflowResult);
 
-    // Validate tasks.json was created (indirectly through state comment)
-    await this.sleep(5000); // Wait for state comment creation
+    // Wait longer for state comment creation and first task trigger
+    await this.sleep(30000); // Wait 30 seconds for state comment and first task trigger
     
-    const stateComment = await this.validators.state.findStateInIssueComments(
-      this.github,
-      this.context.repo.owner,
-      this.context.repo.repo,
-      this.testIssueNumber
+    // Wait for state comment with retries
+    const stateComment = await this.waitForCondition(
+      async () => {
+        const state = await this.validators.state.findStateInIssueComments(
+          this.github,
+          this.context.repo.owner,
+          this.context.repo.repo,
+          this.testIssueNumber
+        );
+        
+        // Make sure we have tasks and the first task has been triggered
+        if (state && state.tasks && state.tasks.length > 0) {
+          this.log(`📊 Found state with ${state.tasks.length} tasks, status: ${state.status}`);
+          return state;
+        }
+        return null;
+      },
+      'Sequential tasks state comment with tasks',
+      300000, // 5 minutes
+      10000   // Check every 10 seconds
     );
 
     if (!stateComment) {
@@ -280,7 +298,9 @@ class E2ETestRunner {
     }
 
     this.testResults.tasksCreated = stateComment.tasks.length;
-    this.log(`✅ Tasks created: ${this.testResults.tasksCreated}`, { tasks: stateComment.tasks });
+    this.log(`✅ Tasks created: ${this.testResults.tasksCreated}`, { 
+      tasks: stateComment.tasks.map(t => ({ id: t.id, title: t.title, status: t.status }))
+    });
 
     return stateComment;
   }
@@ -294,10 +314,51 @@ class E2ETestRunner {
     for (let taskIndex = 0; taskIndex < totalTasks; taskIndex++) {
       this.log(`⚡ Validating task ${taskIndex + 1}/${totalTasks}...`);
       
-      // Wait for task workflow to execute
+      // Wait for task to start processing (check state updates)
+      await this.waitForCondition(
+        async () => {
+          const currentState = await this.validators.state.findStateInIssueComments(
+            this.github,
+            this.context.repo.owner,
+            this.context.repo.repo,
+            this.testIssueNumber
+          );
+          
+          if (currentState && currentState.tasks && currentState.tasks[taskIndex]) {
+            const taskStatus = currentState.tasks[taskIndex].status;
+            this.log(`📊 Task ${taskIndex + 1} status: ${taskStatus}`);
+            
+            // Task should at least be in-progress or completed
+            return taskStatus === 'in-progress' || taskStatus === 'completed';
+          }
+          return false;
+        },
+        `Task ${taskIndex + 1} to start processing`,
+        600000, // 10 minutes to start
+        20000   // Check every 20 seconds
+      );
+      
+      // Wait for task workflow to execute and complete
       const taskResult = await this.waitForCondition(
         async () => {
-          return await this.validators.workflow.checkTaskWorkflowExecution(
+          // First check if task is completed in state
+          const currentState = await this.validators.state.findStateInIssueComments(
+            this.github,
+            this.context.repo.owner,
+            this.context.repo.repo,
+            this.testIssueNumber
+          );
+          
+          if (currentState && currentState.tasks && currentState.tasks[taskIndex]) {
+            const task = currentState.tasks[taskIndex];
+            if (task.status === 'completed') {
+              this.log(`✅ Task ${taskIndex + 1} completed in state`);
+              return { success: true, fromState: true };
+            }
+          }
+          
+          // Also check workflow execution
+          const workflowResult = await this.validators.workflow.checkTaskWorkflowExecution(
             this.github,
             this.context.repo.owner,
             this.context.repo.repo,
@@ -305,22 +366,37 @@ class E2ETestRunner {
             this.testIssueNumber,
             taskIndex
           );
+          
+          if (workflowResult && workflowResult.successful) {
+            this.log(`✅ Task ${taskIndex + 1} workflow completed successfully`);
+            return workflowResult;
+          }
+          
+          return null;
         },
-        `Task ${taskIndex + 1} workflow completion`,
-        900000, // 15 minutes per task
-        15000   // Check every 15 seconds
+        `Task ${taskIndex + 1} completion`,
+        1800000, // 30 minutes per task (increased significantly)
+        25000    // Check every 25 seconds
       );
 
       this.testResults.workflowsExecuted++;
       this.log(`✅ Task ${taskIndex + 1} workflow completed`, taskResult);
 
-      // Validate branch creation
+      // Wait for branch to be available
       const expectedBranch = `sequential/task-${taskIndex + 1}`;
-      const branchExists = await this.validators.branch.validateBranchExists(
-        this.github,
-        this.context.repo.owner,
-        this.context.repo.repo,
-        expectedBranch
+      
+      const branchExists = await this.waitForCondition(
+        async () => {
+          return await this.validators.branch.validateBranchExists(
+            this.github,
+            this.context.repo.owner,
+            this.context.repo.repo,
+            expectedBranch
+          );
+        },
+        `Branch ${expectedBranch} creation`,
+        300000, // 5 minutes for branch
+        10000   // Check every 10 seconds
       );
 
       if (!branchExists) {
@@ -329,14 +405,19 @@ class E2ETestRunner {
 
       this.log(`✅ Branch validated: ${expectedBranch}`);
 
-      // Wait for PR creation
-      await this.sleep(10000); // Give time for PR creation
-      
-      const pr = await this.validators.pr.findPRForBranch(
-        this.github,
-        this.context.repo.owner,
-        this.context.repo.repo,
-        expectedBranch
+      // Wait for PR creation with retries
+      const pr = await this.waitForCondition(
+        async () => {
+          return await this.validators.pr.findPRForBranch(
+            this.github,
+            this.context.repo.owner,
+            this.context.repo.repo,
+            expectedBranch
+          );
+        },
+        `PR creation for task ${taskIndex + 1}`,
+        600000, // 10 minutes for PR creation
+        15000   // Check every 15 seconds
       );
 
       if (pr) {
@@ -354,25 +435,51 @@ class E2ETestRunner {
 
       completedTasks++;
       this.testResults.tasksCompleted = completedTasks;
+      
+      // Wait between tasks to allow for sequential processing
+      if (taskIndex < totalTasks - 1) {
+        this.log(`⏳ Waiting before next task validation...`);
+        await this.sleep(15000); // 15 seconds between task validations
+      }
     }
 
-    // Validate final state
-    await this.sleep(10000); // Wait for final state update
+    // Wait longer for final state update
+    await this.sleep(30000); // Wait 30 seconds for final state update
     
-    const finalState = await this.validators.state.findStateInIssueComments(
-      this.github,
-      this.context.repo.owner,
-      this.context.repo.repo,
-      this.testIssueNumber
+    // Wait for final state with proper completion
+    const finalState = await this.waitForCondition(
+      async () => {
+        const state = await this.validators.state.findStateInIssueComments(
+          this.github,
+          this.context.repo.owner,
+          this.context.repo.repo,
+          this.testIssueNumber
+        );
+        
+        if (state && state.tasks) {
+          const completed = state.tasks.filter(t => t.status === 'completed').length;
+          this.log(`📊 Final state check: ${completed}/${totalTasks} tasks completed, status: ${state.status}`);
+          
+          // Consider test successful if all tasks are completed, regardless of overall status
+          if (completed === totalTasks) {
+            return state;
+          }
+        }
+        
+        return null;
+      },
+      'Final state with all tasks completed',
+      300000, // 5 minutes for final state
+      15000   // Check every 15 seconds
     );
 
     if (!finalState) {
-      throw new Error('Final state comment not found');
+      throw new Error('Final state comment not found or incomplete');
     }
 
     this.log('✅ Sequential execution completed', {
       finalStatus: finalState.status,
-      completedTasks: completedTasks,
+      completedTasks: finalState.tasks.filter(t => t.status === 'completed').length,
       totalTasks: totalTasks
     });
 

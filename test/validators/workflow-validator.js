@@ -68,8 +68,8 @@ class WorkflowValidator {
         owner,
         repo,
         workflow_id: workflowFileName,
-        per_page: 30,
-        created: this.getRecentTimeFilter()
+        per_page: 50, // Increased to capture more runs
+        created: this.getRecentTimeFilter(180) // Look back 3 hours
       });
 
       // Look for workflow runs that might be for our specific task
@@ -79,39 +79,53 @@ class WorkflowValidator {
         return runCreatedTime > testStartTime;
       });
 
+      console.log(`🔍 Found ${relevantRuns.length} relevant task workflow runs for task ${taskIndex + 1}`);
+
       if (relevantRuns.length === 0) {
         return null;
       }
 
-      // For task workflows, we need to check if any completed run corresponds to our task
-      // Since we can't easily match by task index, we'll look for the most recent completed run
+      // For sequential task workflows, we expect at least (taskIndex + 1) successful runs
+      // But we'll be more flexible and look for the most recent successful run
       const completedRuns = relevantRuns.filter(run => 
-        run.status === 'completed' || run.conclusion !== null
+        run.status === 'completed' && run.conclusion !== null
       );
+
+      console.log(`📊 Found ${completedRuns.length} completed task workflow runs`);
 
       if (completedRuns.length === 0) {
         return null; // No completed runs yet
       }
 
-      // Check if we have at least (taskIndex + 1) completed task workflow runs
-      // This helps ensure we're looking at the right task execution
-      const taskSpecificRun = completedRuns[0]; // Most recent completed run
+      // Look for successful runs
+      const successfulRuns = completedRuns.filter(run => run.conclusion === 'success');
+      
+      console.log(`✅ Found ${successfulRuns.length} successful task workflow runs`);
 
-      return {
-        id: taskSpecificRun.id,
-        status: taskSpecificRun.status,
-        conclusion: taskSpecificRun.conclusion,
-        created_at: taskSpecificRun.created_at,
-        updated_at: taskSpecificRun.updated_at,
-        html_url: taskSpecificRun.html_url,
-        run_number: taskSpecificRun.run_number,
-        workflow_file: workflowFileName,
-        task_index: taskIndex,
-        successful: taskSpecificRun.conclusion === 'success'
-      };
+      // We need at least (taskIndex + 1) successful runs for this task to be considered complete
+      if (successfulRuns.length >= (taskIndex + 1)) {
+        // Return the most recent successful run
+        const taskSpecificRun = successfulRuns[0];
+
+        return {
+          id: taskSpecificRun.id,
+          status: taskSpecificRun.status,
+          conclusion: taskSpecificRun.conclusion,
+          created_at: taskSpecificRun.created_at,
+          updated_at: taskSpecificRun.updated_at,
+          html_url: taskSpecificRun.html_url,
+          run_number: taskSpecificRun.run_number,
+          workflow_file: workflowFileName,
+          task_index: taskIndex,
+          successful: taskSpecificRun.conclusion === 'success',
+          total_successful_runs: successfulRuns.length
+        };
+      }
+
+      return null; // Not enough successful runs yet
 
     } catch (error) {
-      console.log(`⚠️ Error checking task workflow for task ${taskIndex}:`, error.message);
+      console.log(`⚠️ Error checking task workflow for task ${taskIndex + 1}:`, error.message);
       return null;
     }
   }

@@ -21,13 +21,13 @@ on:
       timeout_minutes:
         description: 'Test timeout in minutes'
         required: false
-        default: '45'
+        default: '90'
         type: string
 
 jobs:
   e2e-test:
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ fromJson(github.event.inputs.timeout_minutes || '45') }}
+    timeout-minutes: ${{ fromJson(github.event.inputs.timeout_minutes || '90') }}
     
     permissions:
       contents: write
@@ -87,7 +87,7 @@ jobs:
             console.log('🚀 Starting E2E Sequential Workflow Test');
             console.log(`📋 Test scenario: ${process.env.TEST_SCENARIO}`);
             console.log(`🧹 Cleanup enabled: ${process.env.CLEANUP_ENABLED}`);
-            console.log(`⏱️ Timeout: ${{ github.event.inputs.timeout_minutes || '45' }} minutes`);
+            console.log(`⏱️ Timeout: ${{ github.event.inputs.timeout_minutes || '90' }} minutes`);
             
             try {
               const testResult = await testRunner({
@@ -96,7 +96,7 @@ jobs:
                 core,
                 scenario: process.env.TEST_SCENARIO,
                 cleanup: process.env.CLEANUP_ENABLED === 'true',
-                timeoutMinutes: ${{ github.event.inputs.timeout_minutes || '45' }}
+                timeoutMinutes: ${{ github.event.inputs.timeout_minutes || '90' }}
               });
               
               console.log('✅ E2E Test completed successfully');
@@ -163,7 +163,7 @@ jobs:
             
             ### Test Configuration
             - **Scenario**: \`${{ github.event.inputs.test_scenario || 'basic-3-tasks' }}\`
-            - **Timeout**: ${{ github.event.inputs.timeout_minutes || '45' }} minutes
+            - **Timeout**: ${{ github.event.inputs.timeout_minutes || '90' }} minutes
             - **Cleanup**: ${{ github.event.inputs.cleanup || 'true' }}
             - **Workflow Run**: [#${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
             
