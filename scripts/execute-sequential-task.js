@@ -243,32 +243,41 @@ ${'---'}
       throw new Error(`Not in a git repository: ${gitError.message}`);
     }
     
-    // Delete branch if it already exists locally
-    try {
-      const localBranches = execSync('git branch --list', { encoding: 'utf8' });
-      if (localBranches.includes(taskBranch)) {
-        execSync(`git branch -D ${taskBranch}`);
-        console.log(`🗑️ Deleted existing local branch: ${taskBranch}`);
-      }
-    } catch (e) {
-      console.log(`ℹ️ No local branch to delete: ${taskBranch}`);
-    }
+    // Check if we're currently on the target branch
+    const currentBranchName = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
+    console.log(`📍 Currently on branch: ${currentBranchName}`);
     
-    // Delete remote branch if it exists
-    try {
-      const remoteBranches = execSync('git branch -r', { encoding: 'utf8' });
-      if (remoteBranches.includes(`origin/${taskBranch}`)) {
-        execSync(`git push origin --delete ${taskBranch}`, { stdio: 'pipe' });
-        console.log(`🗑️ Deleted existing remote branch: ${taskBranch}`);
+    // If we're already on the target branch, just continue with it
+    if (currentBranchName === taskBranch) {
+      console.log(`✅ Already on target branch ${taskBranch} - continuing with existing branch`);
+    } else {
+      // Delete existing local branch if it exists (but we're not on it)
+      try {
+        const localBranches = execSync('git branch --list', { encoding: 'utf8' });
+        if (localBranches.includes(taskBranch)) {
+          execSync(`git branch -D ${taskBranch}`);
+          console.log(`🗑️ Deleted existing local branch: ${taskBranch}`);
+        }
+      } catch (e) {
+        console.log(`ℹ️ No local branch to delete: ${taskBranch}`);
       }
-    } catch (e) {
-      console.log(`ℹ️ No remote branch to delete: ${taskBranch}`);
+      
+      // Delete remote branch if it exists
+      try {
+        const remoteBranches = execSync('git branch -r', { encoding: 'utf8' });
+        if (remoteBranches.includes(`origin/${taskBranch}`)) {
+          execSync(`git push origin --delete ${taskBranch}`, { stdio: 'pipe' });
+          console.log(`🗑️ Deleted existing remote branch: ${taskBranch}`);
+        }
+      } catch (e) {
+        console.log(`ℹ️ No remote branch to delete: ${taskBranch}`);
+      }
+      
+      // Create and checkout new branch
+      console.log(`🌿 Creating new branch from current HEAD`);
+      execSync(`git checkout -b ${taskBranch}`);
+      console.log(`✅ Created and checked out new branch: ${taskBranch}`);
     }
-    
-    // Create and checkout new branch
-    console.log(`🌿 Creating new branch from current HEAD`);
-    execSync(`git checkout -b ${taskBranch}`);
-    console.log(`✅ Created and checked out new branch: ${taskBranch}`);
     
     // Verify branch creation
     const currentBranch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
