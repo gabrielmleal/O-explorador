@@ -376,9 +376,77 @@ module.exports.handleTaskCompletion = async ({ github, context, core, taskContex
   
   const taskData = taskContext.taskData;
   
-  // Check if any files were modified
+  // First, detect if Claude created its own branch instead of using ours
+  let actualBranch = currentBranch;
+  let needsBranchMerge = false;
+  
+  try {
+    // Check if Claude created a branch with pattern claude/issue-{parentIssue}-*
+    const claudeBranchPattern = `claude/issue-${taskContext.parentIssue}-`;
+    console.log(`🔍 Checking for Claude-created branch with pattern: ${claudeBranchPattern}*`);
+    
+    // Get all remote branches
+    const remoteBranches = execSync('git branch -r', { encoding: 'utf8' });
+    const claudeBranches = remoteBranches.split('\n')
+      .map(branch => branch.trim().replace('origin/', ''))
+      .filter(branch => branch.startsWith(claudeBranchPattern))
+      .sort()
+      .reverse(); // Most recent first
+    
+    console.log(`🔍 Found Claude branches: ${JSON.stringify(claudeBranches)}`);
+    
+    if (claudeBranches.length > 0) {
+      // Use the most recent Claude branch
+      const claudeBranch = claudeBranches[0];
+      console.log(`⚠️ Claude created its own branch: ${claudeBranch}`);
+      console.log(`🔄 Need to merge changes from ${claudeBranch} to ${currentBranch}`);
+      
+      // Fetch the Claude branch and merge its changes
+      try {
+        execSync(`git fetch origin ${claudeBranch}`);
+        
+        // Check if Claude's branch has changes compared to current branch
+        const comparison = execSync(`git rev-list --count ${currentBranch}..origin/${claudeBranch}`, { encoding: 'utf8' }).trim();
+        const commitsAhead = parseInt(comparison);
+        
+        if (commitsAhead > 0) {
+          console.log(`📊 Claude's branch has ${commitsAhead} commits ahead of sequential branch`);
+          
+          // Merge Claude's changes into our sequential branch
+          console.log(`🔀 Merging changes from origin/${claudeBranch} into ${currentBranch}`);
+          execSync(`git merge origin/${claudeBranch} --no-edit -m "Merge Claude's changes from ${claudeBranch} into sequential task branch"`);
+          
+          actualBranch = currentBranch; // We're using our branch with Claude's changes merged
+          needsBranchMerge = false; // Already merged
+          console.log(`✅ Successfully merged Claude's changes into ${currentBranch}`);
+        } else {
+          console.log(`ℹ️ Claude's branch has no additional commits`);
+        }
+        
+      } catch (mergeError) {
+        console.log(`❌ Failed to merge Claude's branch: ${mergeError.message}`);
+        console.log(`🔄 Will use Claude's branch directly for PR: ${claudeBranch}`);
+        actualBranch = claudeBranch;
+        needsBranchMerge = true;
+      }
+    } else {
+      console.log(`✅ No Claude-specific branch found - Claude worked on our branch: ${currentBranch}`);
+    }
+    
+  } catch (error) {
+    console.log(`⚠️ Branch detection failed: ${error.message}`);
+    console.log(`🔄 Continuing with original branch: ${currentBranch}`);
+  }
+  
+  // Update context with actual branch being used
+  if (actualBranch !== currentBranch) {
+    taskContext.currentBranch = actualBranch;
+    console.log(`📝 Updated task context to use actual branch: ${actualBranch}`);
+  }
+  
+  // Check if any files were modified on the actual branch
   const status = execSync('git status --porcelain', { encoding: 'utf8' });
-  if (!status.trim()) {
+  if (!status.trim() && !needsBranchMerge) {
     console.log('⚠️ No changes made for this task');
     
     // Update task status
@@ -396,15 +464,19 @@ module.exports.handleTaskCompletion = async ({ github, context, core, taskContex
     const nextTaskIndex = taskIndex + 1;
     if (nextTaskIndex < sequentialState.tasks.length) {
       const nextTaskTitle = sequentialState.tasks[nextTaskIndex]?.title;
-      await triggerNextTask(github, context, nextTaskIndex, currentBranch, workflowToken, taskContext.parentIssue, nextTaskTitle);
+      await triggerNextTask(github, context, nextTaskIndex, actualBranch, workflowToken, taskContext.parentIssue, nextTaskTitle);
     }
     
     return { status: 'no-changes', prNumber: null };
   }
 
-  // Commit changes
-  execSync('git add -A');
-  execSync(`git commit -m "Sequential Task ${taskIndex + 1}: ${taskData.title}
+  // Only commit and push if we're on our sequential branch (not Claude's branch)
+  if (actualBranch === currentBranch && !needsBranchMerge) {
+    console.log('💾 Committing changes to sequential branch...');
+    
+    // Commit changes
+    execSync('git add -A');
+    execSync(`git commit -m "Sequential Task ${taskIndex + 1}: ${taskData.title}
 
 ${taskData.body}
 
@@ -414,44 +486,47 @@ ${taskContext.previousTasks.map(t => `- Task ${t.id}: ${t.title}`).join('\n') ||
 🤖 Generated with Claude Code Sequential Executor
 Co-authored-by: Claude <claude@anthropic.com>"`);
 
-  // Configure git authentication for push operation
-  if (workflowToken) {
-    console.log('🔐 Configuring git authentication with workflow token');
-    
-    // Configure git remote URL with token for authentication
-    const repoUrl = `https://x-access-token:${workflowToken}@github.com/${context.repo.owner}/${context.repo.repo}.git`;
-    console.log(`🔧 Setting git remote URL with token authentication`);
-    execSync(`git remote set-url origin ${repoUrl}`);
-    
-    // Configure git credential helper
-    execSync('git config --local credential.helper ""');
-    execSync('git config --local http.https://github.com/.extraheader ""');
-    
-  } else {
-    console.log('⚠️ No authentication token found in environment - attempting push without explicit authentication');
-  }
+    // Configure git authentication for push operation
+    if (workflowToken) {
+      console.log('🔐 Configuring git authentication with workflow token');
+      
+      // Configure git remote URL with token for authentication
+      const repoUrl = `https://x-access-token:${workflowToken}@github.com/${context.repo.owner}/${context.repo.repo}.git`;
+      console.log(`🔧 Setting git remote URL with token authentication`);
+      execSync(`git remote set-url origin ${repoUrl}`);
+      
+      // Configure git credential helper
+      execSync('git config --local credential.helper ""');
+      execSync('git config --local http.https://github.com/.extraheader ""');
+      
+    } else {
+      console.log('⚠️ No authentication token found in environment - attempting push without explicit authentication');
+    }
 
-  // Push the task branch
-  console.log(`🚀 Pushing branch: ${currentBranch}`);
-  execSync(`git push origin ${currentBranch}`);
-  
-  // Clean up git remote URL after push for security
-  if (workflowToken) {
-    console.log('🧹 Cleaning up git remote URL after push');
-    const cleanRepoUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}.git`;
-    execSync(`git remote set-url origin ${cleanRepoUrl}`);
+    // Push the task branch
+    console.log(`🚀 Pushing branch: ${actualBranch}`);
+    execSync(`git push origin ${actualBranch}`);
+    
+    // Clean up git remote URL after push for security
+    if (workflowToken) {
+      console.log('🧹 Cleaning up git remote URL after push');
+      const cleanRepoUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}.git`;
+      execSync(`git remote set-url origin ${cleanRepoUrl}`);
+    }
+  } else {
+    console.log('ℹ️ Using Claude\'s branch - no need to commit/push separately');
   }
 
   // Create PR to previous branch (or main for first task)
   const baseBranch = previousBranch;
-  console.log(`📝 Creating PR from ${currentBranch} to ${baseBranch}`);
+  console.log(`📝 Creating PR from ${actualBranch} to ${baseBranch}`);
   
   try {
     const { data: pr } = await github.rest.pulls.create({
       owner: context.repo.owner,
       repo: context.repo.repo,
       title: `[Sequential] Task ${taskIndex + 1}: ${taskData.title}`,
-      head: currentBranch,
+      head: actualBranch,
       base: baseBranch,
       body: `## Sequential Task ${taskIndex + 1} of ${sequentialState.tasks.length}
 
@@ -513,7 +588,7 @@ ${sequentialState.parent_issue ? `\nRelated to: #${sequentialState.parent_issue}
       }
       
       const nextTaskTitle = sequentialState.tasks[nextTaskIndex]?.title;
-      await triggerNextTask(github, context, nextTaskIndex, currentBranch, workflowToken, taskContext.parentIssue, nextTaskTitle);
+      await triggerNextTask(github, context, nextTaskIndex, actualBranch, workflowToken, taskContext.parentIssue, nextTaskTitle);
       
       console.log(`🚀 Triggered next sequential task: ${nextTaskIndex + 1}`);
     } else {

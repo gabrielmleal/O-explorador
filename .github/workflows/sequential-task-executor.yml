@@ -225,6 +225,12 @@ jobs:
           custom_instructions: |
             **TASK**: ${{ steps.prepare-task.outputs.task_title }}
             
+            **CRITICAL - BRANCH REQUIREMENTS**: 
+            - You are currently on branch `${{ steps.prepare-task.outputs.current_branch }}`
+            - DO NOT create a new branch - work on the current branch only
+            - DO NOT switch branches - stay on `${{ steps.prepare-task.outputs.current_branch }}`
+            - This branch contains changes from previous sequential tasks - build upon them
+            
             **IMPLEMENTATION REQUIRED**: Create actual working code, files, and implementations - not task descriptions or documentation.
             
             **SPECIFIC INSTRUCTIONS**:
@@ -233,8 +239,9 @@ jobs:
             - Create or modify all necessary files
             - Follow existing code patterns and conventions
             - Ensure all code is functional and production-ready
+            - Build upon any existing implementations from previous tasks
             
-            **CONTEXT**: This is task ${{ steps.prepare-task.outputs.task_number }} of ${{ steps.prepare-task.outputs.total_tasks }} in a sequential implementation. Build upon any existing changes from previous tasks if applicable.
+            **CONTEXT**: This is task ${{ steps.prepare-task.outputs.task_number }} of ${{ steps.prepare-task.outputs.total_tasks }} in a sequential implementation. Previous tasks have already made changes to this codebase - enhance and build upon them.
           timeout_minutes: 30
           allowed_tools: "Read,Write,Edit,MultiEdit,Glob,Grep,Bash(git *),Bash(npm *),Bash(yarn *),Bash(node *),Bash(python *),Bash(pip *)"
           disallowed_tools: "Bash(rm *),Bash(sudo *),Bash(curl *),Bash(wget *),Bash(dd *)"
