@@ -32,9 +32,13 @@ public class Jogador extends ObjetoMapa {
     private boolean puloDuploUsado;
     
     //Atributos de ataques e ações do jogador
-    private boolean atirando, atirou, atacando, correndo, terminando;
+    private boolean atirando, atirou, atacando, correndo, terminando, teleportando;
     private double atacaAlcance;
     private ArrayList<Flecha> flechas;
+    
+    //Teleport effect attributes
+    private boolean needsDepartureEffect, needsArrivalEffect;
+    private int departureX, departureY, arrivalX, arrivalY;
     
     //Atributos de animação
     private ArrayList<BufferedImage[]> sprites;
@@ -127,6 +131,82 @@ public class Jogador extends ObjetoMapa {
     public void resetarPuloDuplo(){
         podeUsarPuloDuplo = false;
         puloDuploUsado = false;
+    }
+    
+    // Teleportation methods
+    public void teleporta(){
+        if(!atacando && !atirando){
+            teleportando = true;
+            realizaTeleporte();
+        }
+    }
+    
+    private void realizaTeleporte(){
+        if(!teleportando) return;
+        
+        // Store departure position for effect
+        departureX = x;
+        departureY = y;
+        needsDepartureEffect = true;
+        
+        int teleportDistance = 300;
+        int newX = olhandoDireita ? x + teleportDistance : x - teleportDistance;
+        
+        // Find safe teleport position with collision detection
+        int safeX = encontrarPosicaoSegura(x, newX);
+        
+        mudarPosicaoPara(safeX, y);
+        
+        // Store arrival position for effect
+        arrivalX = safeX;
+        arrivalY = y;
+        needsArrivalEffect = true;
+        
+        teleportando = false;
+    }
+    
+    private int encontrarPosicaoSegura(int startX, int targetX){
+        int direction = targetX > startX ? 1 : -1;
+        int distance = Math.abs(targetX - startX);
+        int increment = 30; // Test in 30-pixel increments
+        
+        for(int i = increment; i <= distance; i += increment){
+            int testX = startX + (i * direction);
+            if(verificarColisaoNaPosicao(testX, y)){
+                // Return the last safe position
+                return startX + ((i - increment) * direction);
+            }
+        }
+        
+        // If no collision found, return target position
+        return targetX;
+    }
+    
+    private boolean verificarColisaoNaPosicao(int testX, int testY){
+        // Calculate collision box boundaries at test position
+        int left = testX - clargura/2;
+        int right = testX + clargura/2;
+        int top = testY - caltura/2;
+        int bottom = testY + caltura/2;
+        
+        // Check all corners of the collision box
+        return verificarPonto(left, top) || verificarPonto(right, top) || 
+               verificarPonto(left, bottom) || verificarPonto(right, bottom);
+    }
+    
+    private boolean verificarPonto(int x, int y){
+        // Convert world coordinates to tile coordinates
+        int col = x / mb.qualTamanhoDoBloco();
+        int row = y / mb.qualTamanhoDoBloco();
+        
+        // Check bounds
+        if(col < 0 || col >= mb.qualNumDeColunas() || row < 0 || row >= mb.qualNumDeLinhas()){
+            return true; // Outside map bounds
+        }
+        
+        // Check if tile is blocked
+        int tipoBloco = mb.qualTipoBloco(row, col);
+        return tipoBloco != 0; // 0 = empty, non-zero = blocked
     }
     
     @Override
@@ -354,6 +434,31 @@ public class Jogador extends ObjetoMapa {
     }
     
     public boolean estaMorto(){return morto;}
+    
+    // Teleport effect methods
+    public boolean needsDepartureEffect(){
+        return needsDepartureEffect;
+    }
+    
+    public boolean needsArrivalEffect(){
+        return needsArrivalEffect;
+    }
+    
+    public int[] getDeparturePosition(){
+        return new int[]{departureX, departureY};
+    }
+    
+    public int[] getArrivalPosition(){
+        return new int[]{arrivalX, arrivalY};
+    }
+    
+    public void consumeDepartureEffect(){
+        needsDepartureEffect = false;
+    }
+    
+    public void consumeArrivalEffect(){
+        needsArrivalEffect = false;
+    }
     
     public void desenha(Graphics2D g){
         for(int i=0;i<flechas.size();i++){
