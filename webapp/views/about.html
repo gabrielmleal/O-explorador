@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{title}}</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        header {
+            background-color: #2c3e50;
+            color: white;
+            padding: 1rem 0;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+        .nav-links {
+            display: flex;
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            gap: 20px;
+        }
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        .nav-links a:hover {
+            background-color: rgba(255,255,255,0.1);
+        }
+        main {
+            background-color: white;
+            margin: 20px 0;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .info-section {
+            margin: 20px 0;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+        }
+        footer {
+            background-color: #34495e;
+            color: white;
+            text-align: center;
+            padding: 20px 0;
+            margin-top: 40px;
+        }
+        .tech-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 15px 0;
+        }
+        .tech-badge {
+            background-color: #3498db;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <nav>
+                <div class="logo">🗺️ Explorador Web App</div>
+                <ul class="nav-links">
+                    <li><a href="/">Home</a></li>
+                    <li><a href="/about">About</a></li>
+                    <li><a href="/health">Health</a></li>
+                </ul>
+                <div style="display: inline-block; padding: 5px 10px; background-color: #27ae60; color: white; border-radius: 15px; font-size: 0.8rem;">Foundation Ready</div>
+            </nav>
+        </div>
+    </header>
+    
+    <div class="container">
+        <main>
+            <h1>📋 About Explorador Web App</h1>
+            
+            <div class="info-section">
+                <h2>🎯 Project Overview</h2>
+                <p>This is a Node.js/Express.js web application built as part of a sequential task implementation test. The application demonstrates a complete web development workflow with user authentication, profile management, and dashboard functionality.</p>
+            </div>
+            
+            <div class="info-section">
+                <h2>🛠️ Technology Stack</h2>
+                <div class="tech-list">
+                    <span class="tech-badge">Node.js</span>
+                    <span class="tech-badge">Express.js</span>
+                    <span class="tech-badge">bcryptjs</span>
+                    <span class="tech-badge">JWT</span>
+                    <span class="tech-badge">HTML/CSS</span>
+                    <span class="tech-badge">JavaScript</span>
+                </div>
+            </div>
+            
+            <div class="info-section">
+                <h2>🏗️ Architecture</h2>
+                <p><strong>MVC Pattern:</strong> The application follows the Model-View-Controller architectural pattern for clean separation of concerns:</p>
+                <ul>
+                    <li><strong>Models:</strong> Data structures and business logic</li>
+                    <li><strong>Views:</strong> HTML templates and user interface</li>
+                    <li><strong>Controllers:</strong> Request handling and response logic</li>
+                </ul>
+            </div>
+            
+            <div class="info-section">
+                <h2>📈 Sequential Implementation</h2>
+                <p>This application is being built through a 4-task sequential implementation process:</p>
+                <ol>
+                    <li><strong>✅ Task 1:</strong> Express.js Application Foundation (Complete)</li>
+                    <li><strong>⏳ Task 2:</strong> User Authentication System</li>
+                    <li><strong>⏳ Task 3:</strong> User Profile CRUD Operations</li>
+                    <li><strong>⏳ Task 4:</strong> User Dashboard Interface</li>
+                </ol>
+            </div>
+            
+            <div class="info-section">
+                <h2>🔗 API Endpoints</h2>
+                <ul>
+                    <li><code>GET /</code> - Home page</li>
+                    <li><code>GET /about</code> - About page</li>
+                    <li><code>GET /health</code> - Health check endpoint</li>
+                </ul>
+            </div>
+        </main>
+    </div>
+    
+    <footer>
+        <div class="container">
+            <p>&copy; 2025 Explorador Web App - Sequential Task Implementation Test</p>
+            <p>Built with Node.js & Express.js | Task 1 of 4 Complete</p>
+        </div>
+    </footer>
+</body>
+</html>
