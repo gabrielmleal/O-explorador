@@ -139,81 +139,110 @@ jobs:
               }
             }
 
-      - name: Trigger Claude Code implementation via issue comment
+      - name: Implement task with Claude Code Action
         if: steps.prepare-task.outputs.task_prepared == 'true'
+        uses: anthropics/claude-code-action@beta
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          custom_instructions: |
+            You are implementing Task ${{ steps.prepare-task.outputs.task_number }} of ${{ steps.prepare-task.outputs.total_tasks }} in a SEQUENTIAL task execution system.
+
+            **CRITICAL CONTEXT**: This task builds on previous tasks changes. You are currently working on branch `${{ steps.prepare-task.outputs.current_branch }}` which was created from `${{ steps.prepare-task.outputs.previous_branch }}`.
+
+            **TASK TO IMPLEMENT**: ${{ steps.prepare-task.outputs.task_title }}
+
+            **SEQUENTIAL EXECUTION CONTEXT**:
+            - Task Index: ${{ steps.prepare-task.outputs.task_number }}/${{ steps.prepare-task.outputs.total_tasks }}
+            - Current Branch: `${{ steps.prepare-task.outputs.current_branch }}`
+            - Base Branch: `${{ steps.prepare-task.outputs.previous_branch }}`
+            - Task Context: Available in `current-task-context.json`
+
+            **INSTRUCTIONS**:
+            1. Read `CLAUDE.md` for project guidelines and understand the sequential task execution system
+            2. **CRITICAL**: Read `current-task-context.json` which contains:
+               - `taskData`: Full task details (title, description, requirements)
+               - `sequentialContext`: The original project context and requirements
+               - `previousTasks`: All completed tasks and their implementations
+               - `taskIndex`/`totalTasks`: Your position in the sequence
+               - `previousBranch`: The branch containing previous tasks' changes
+            3. Examine existing code to understand previous tasks implementations
+            4. Implement this specific task building on existing changes from previous tasks
+            5. Follow project conventions and best practices
+            6. Create/modify all necessary files for this task
+            7. Ensure code is production-ready with proper error handling
+            8. Write tests if the project has testing infrastructure
+
+            **IMPORTANT SEQUENTIAL CONSIDERATIONS**:
+            - You are working with cumulative changes from previous tasks
+            - Use the `sequentialContext` from the context file to understand the overall goal
+            - Review `previousTasks` to understand what has already been implemented
+            - Focus only on implementing this specific task (`taskData.title` and `taskData.body`)
+            - Build upon and integrate with existing code from previous tasks
+            - Do not redo work from previous tasks unless necessary for integration
+            - Your changes will be part of a stacked PR system
+
+            **YOUR GOAL**: Implement working code for this task, not just task descriptions. Create actual files, functions, and implementations that fulfill the task requirements. Use all the context information to understand dependencies and build upon previous work.
+          timeout_minutes: 30
+
+      - name: Handle sequential task completion
+        if: always() && steps.prepare-task.outputs.task_prepared == 'true'
         uses: actions/github-script@v7
+        env:
+          WORKFLOW_TRIGGER_TOKEN: ${{ secrets.WORKFLOW_TRIGGER_TOKEN }}
         with:
           github-token: ${{ secrets.WORKFLOW_TRIGGER_TOKEN || github.token }}
           script: |
+            const path = require('path');
+            const fs = require('fs');
+            
             try {
-              // Get parent issue from the task context
-              const parentIssue = context.payload.client_payload?.parent_issue;
+              console.log('📋 Handling sequential task completion...');
               
-              if (!parentIssue) {
-                throw new Error('Parent issue required to trigger Claude Code implementation');
+              // Check if current-task-context.json exists (should exist from task preparation)
+              if (!fs.existsSync('current-task-context.json')) {
+                console.log('❌ Current task context file not found');
+                core.setFailed('Task context file missing - cannot handle completion');
+                return;
               }
               
-              // Create a comment that triggers Claude Code Action
-              const taskTitle = '${{ steps.prepare-task.outputs.task_title }}';
-              const taskNumber = '${{ steps.prepare-task.outputs.task_number }}';
-              const totalTasks = '${{ steps.prepare-task.outputs.total_tasks }}';
-              const currentBranch = '${{ steps.prepare-task.outputs.current_branch }}';
-              const previousBranch = '${{ steps.prepare-task.outputs.previous_branch }}';
+              const taskContext = JSON.parse(fs.readFileSync('current-task-context.json', 'utf8'));
+              console.log(`📋 Processing completion for Task ${taskContext.taskIndex + 1}: ${taskContext.taskData.title}`);
               
-              console.log(`🤖 Triggering Claude Code Action for branch: ${currentBranch}`);
+              // Import the task completion handler
+              const executeSequentialTask = require(path.join(process.cwd(), 'scripts', 'execute-sequential-task.js'));
               
-              const claudeInstructions = '@claude You are implementing Task ' + taskNumber + ' of ' + totalTasks + ' in a SEQUENTIAL task execution system.\\n\\n' +
-                '**CRITICAL CONTEXT**: This task builds on previous tasks changes. You are currently working on branch `' + currentBranch + '` which was created from `' + previousBranch + '`.\\n\\n' +
-                '**TASK TO IMPLEMENT**: ' + taskTitle + '\\n\\n' +
-                '**SEQUENTIAL EXECUTION CONTEXT**:\\n' +
-                '- Task Index: ' + taskNumber + '/' + totalTasks + '\\n' +
-                '- Current Branch: `' + currentBranch + '`\\n' +
-                '- Base Branch: `' + previousBranch + '`\\n' +
-                '- Task Context: Available in `current-task-context.json`\\n\\n' +
-                '**INSTRUCTIONS**:\\n' +
-                '1. Read `CLAUDE.md` for project guidelines\\n' +
-                '2. Read `current-task-context.json` for full sequential context\\n' +
-                '3. Examine existing code to understand previous tasks implementations\\n' +
-                '4. Implement this specific task building on existing changes\\n' +
-                '5. Follow project conventions and best practices\\n' +
-                '6. Create/modify all necessary files for this task\\n' +
-                '7. Ensure code is production-ready with proper error handling\\n' +
-                '8. Write tests if the project has testing infrastructure\\n\\n' +
-                '**IMPORTANT SEQUENTIAL CONSIDERATIONS**:\\n' +
-                '- You are working with cumulative changes from previous tasks\\n' +
-                '- Focus only on implementing this specific task\\n' +
-                '- Build upon and integrate with existing code from previous tasks\\n' +
-                '- Do not redo work from previous tasks unless necessary for integration\\n' +
-                '- Your changes will be reviewed as part of a stacked PR system\\n\\n' +
-                '**WORKFLOW INTEGRATION**: This comment was automatically created by Sequential Task Executor. Once you complete this task, the system will automatically create a PR and trigger the next task if applicable.';
-
-              const { data: comment } = await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: parentIssue,
-                body: claudeInstructions
+              // Handle task completion (PR creation and next task triggering)
+              const result = await executeSequentialTask.handleTaskCompletion({ 
+                github, 
+                context, 
+                core, 
+                taskContext 
               });
               
-              console.log(`✅ Created Claude Code trigger comment #${comment.id} on issue #${parentIssue}`);
-              console.log(`🤖 Claude Code Action should now be triggered via issue_comment event`);
-              
-              core.setOutput('claude_comment_id', comment.id);
-              core.setOutput('claude_triggered', 'true');
+              if (result.status === 'completed') {
+                console.log(`✅ Task ${taskContext.taskIndex + 1} completed successfully`);
+                console.log(`📝 Created PR #${result.prNumber}`);
+                console.log(`🚀 Next task will be triggered automatically if applicable`);
+                
+                core.setOutput('pr_number', result.prNumber);
+                core.setOutput('task_status', 'completed');
+                
+              } else if (result.status === 'no-changes') {
+                console.log(`⚠️ Task ${taskContext.taskIndex + 1} completed with no changes needed`);
+                console.log(`🚀 Next task will be triggered automatically`);
+                core.setOutput('task_status', 'no-changes');
+                
+              } else if (result.status === 'all_completed') {
+                console.log('🎉 All sequential tasks have been completed!');
+                core.setOutput('task_status', 'all_completed');
+                core.setOutput('total_tasks_completed', result.tasksCompleted);
+              }
               
             } catch (error) {
-              console.log('❌ Failed to trigger Claude Code implementation:', error.message);
-              core.setFailed(`Failed to trigger Claude Code: ${error.message}`);
+              console.log('❌ Sequential task completion handling failed:', error.message);
+              console.log('🔍 Full error:', error);
+              core.setFailed(`Task completion failed: ${error.message}`);
             }
-
-      - name: Wait for Claude Code completion
-        if: steps.prepare-task.outputs.task_prepared == 'true'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            console.log('✅ Task preparation complete and Claude Code triggered');
-            console.log('⏳ Waiting for Claude Code Action to implement the task...');
-            console.log('📋 Task completion will be handled by a separate workflow triggered by Claude Code Action');
-            console.log('🔗 Monitor progress in the issue thread and watch for the next sequential task to trigger automatically');
 
       - name: Upload task artifacts
         if: always()

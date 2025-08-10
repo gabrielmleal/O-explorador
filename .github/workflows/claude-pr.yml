@@ -11,8 +11,13 @@ jobs:
   claude-pr-response:
     runs-on: ubuntu-latest
     if: |
-      (github.event_name == 'issue_comment' && github.event.issue.pull_request && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude'))
+      (github.event_name == 'issue_comment' && 
+       github.event.issue.pull_request && 
+       contains(github.event.comment.body, '@claude') &&
+       !contains(join(github.event.issue.labels.*.name, ','), 'sequential-task')) ||
+      (github.event_name == 'pull_request_review_comment' && 
+       contains(github.event.comment.body, '@claude') &&
+       !contains(join(github.event.pull_request.labels.*.name, ','), 'sequential-task'))
     
     permissions:
       contents: write
@@ -72,7 +77,7 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           custom_instructions: |
-            @claude You are helping with a pull request. Here's the context:
+            You are helping with a pull request. Here's the context:
             
             PR #${{ steps.pr_details.outputs.pr_number }}
             
