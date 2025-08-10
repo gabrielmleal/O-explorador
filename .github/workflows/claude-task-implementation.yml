@@ -51,11 +51,6 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.WORKFLOW_TRIGGER_TOKEN || github.token }}
 
-      - name: Setup Git Token for Authentication
-        uses: fregante/setup-git-token@v1
-        with:
-          token: ${{ secrets.WORKFLOW_TRIGGER_TOKEN || github.token }}
-
       - name: Detect sequential task context and branch
         id: detect-context
         uses: actions/github-script@v7

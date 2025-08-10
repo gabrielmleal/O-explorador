@@ -394,16 +394,33 @@ ${taskContext.previousTasks.map(t => `- Task ${t.id}: ${t.title}`).join('\n') ||
 🤖 Generated with Claude Code Sequential Executor
 Co-authored-by: Claude <claude@anthropic.com>"`);
 
-  // Verify token availability for push operation
+  // Configure git authentication for push operation
   if (workflowToken) {
-    console.log('🔐 Workflow token available - git authentication already configured by checkout action');
+    console.log('🔐 Configuring git authentication with workflow token');
+    
+    // Configure git remote URL with token for authentication
+    const repoUrl = `https://x-access-token:${workflowToken}@github.com/${context.repo.owner}/${context.repo.repo}.git`;
+    console.log(`🔧 Setting git remote URL with token authentication`);
+    execSync(`git remote set-url origin ${repoUrl}`);
+    
+    // Configure git credential helper
+    execSync('git config --local credential.helper ""');
+    execSync('git config --local http.https://github.com/.extraheader ""');
+    
   } else {
-    console.log('⚠️ No authentication token found in environment');
+    console.log('⚠️ No authentication token found in environment - attempting push without explicit authentication');
   }
 
   // Push the task branch
   console.log(`🚀 Pushing branch: ${currentBranch}`);
   execSync(`git push origin ${currentBranch}`);
+  
+  // Clean up git remote URL after push for security
+  if (workflowToken) {
+    console.log('🧹 Cleaning up git remote URL after push');
+    const cleanRepoUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}.git`;
+    execSync(`git remote set-url origin ${cleanRepoUrl}`);
+  }
 
   // Create PR to previous branch (or main for first task)
   const baseBranch = previousBranch;
