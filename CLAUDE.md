@@ -194,11 +194,19 @@ This is an automated sequential workflow system that uses Claude Code to decompo
 3. Link to related issues
 4. Respond to review feedback promptly
 
-### Claude Integration
-1. Provide clear, specific prompts
-2. Include relevant context
-3. Set appropriate complexity expectations
-4. Validate Claude's outputs
+### Claude Code Action Integration
+1. **Authentication**: Use OAuth token authentication (`claude_code_oauth_token`)
+2. **Tool Security**: Always specify `allowed_tools` and `disallowed_tools` for security
+3. **Timeouts**: Set appropriate timeouts based on task complexity (15-30 minutes)
+4. **Custom Instructions**: Provide clear, specific prompts with relevant context
+5. **Version**: Use `anthropics/claude-code-action@beta` for latest features
+
+#### Valid Configuration Parameters
+- `claude_code_oauth_token`: OAuth authentication token (required)
+- `timeout_minutes`: Execution timeout (default: 30)
+- `custom_instructions`: Task-specific instructions for Claude
+- `allowed_tools`: Whitelist of tools Claude can use
+- `disallowed_tools`: Blacklist of dangerous tools Claude cannot use
 
 ## Common Patterns
 
@@ -232,6 +240,7 @@ Task 1 completed successfully. Automatically triggering next task in sequence.
   uses: anthropics/claude-code-action@beta
   with:
     claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+    timeout_minutes: 30
     custom_instructions: |
       You are implementing Task ${{ steps.prepare-task.outputs.task_number }} of ${{ steps.prepare-task.outputs.total_tasks }} in a SEQUENTIAL task execution system.
       
@@ -241,7 +250,8 @@ Task 1 completed successfully. Automatically triggering next task in sequence.
       - `previousTasks`: All completed tasks and their implementations
       
       **YOUR GOAL**: Implement working code for this task, not just task descriptions.
-    timeout_minutes: 30
+    allowed_tools: "Read,Write,Edit,MultiEdit,Glob,Grep,Bash(git *),Bash(npm *),Bash(yarn *),Bash(node *)"
+    disallowed_tools: "Bash(rm *),Bash(sudo *),Bash(curl *),Bash(wget *),Bash(dd *)"
 ```
 
 ### Error Recovery
@@ -300,11 +310,12 @@ try {
 - Update documentation
 - Submit focused PRs
 
-### Critical Constraints
-- **NEVER use `repository_dispatch`** with Claude Code GitHub Actions - they are incompatible
-- **Always use `custom_instructions`** instead of `trigger_phrase` for Claude Code Actions
-- **Sequential coordination must use issue comment triggers** in format: `[SEQUENTIAL-TASK-TRIGGER] task_index=N ...`
-- **Ensure Claude receives implementation context** via `current-task-context.json` for sequential tasks
+### Critical Implementation Guidelines
+- **OAuth Authentication**: Always use `claude_code_oauth_token` for authentication
+- **Tool Security**: Specify both `allowed_tools` and `disallowed_tools` for security
+- **Version Consistency**: Use `anthropics/claude-code-action@beta` across all workflows
+- **Sequential coordination**: Use issue comment triggers in format: `[SEQUENTIAL-TASK-TRIGGER] task_index=N ...`
+- **Context Delivery**: Ensure Claude receives implementation context via `current-task-context.json` for sequential tasks
 
 ## Current System State
 
@@ -325,5 +336,9 @@ try {
 - `scripts/setup-sequential-tasks.js`: Initial task setup and first trigger
 - `scripts/execute-sequential-task.js`: Task execution and next task triggering
 - `scripts/sequential-task-recovery.js`: Recovery operations with comment triggers
-- please, save how you should run gh commands, like this: bash -c 'unset GITHUB_TOKEN GITHUB_USER; gh auth status'
-- ONLY CHANGE THE TEST IF YOU'RE ABSOLUTELY SURE THE PROBLEM IS IN THE TEST AND NOT IN THE WORKFLOW
+### GitHub CLI Usage
+- Run gh commands with clean environment: `bash -c 'unset GITHUB_TOKEN GITHUB_USER; gh auth status'`
+
+### Testing Guidelines
+- ONLY CHANGE TESTS if you're absolutely sure the problem is in the test and not in the workflow
+- Validate workflow changes with real sequential execution before considering them complete

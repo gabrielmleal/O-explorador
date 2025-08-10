@@ -76,6 +76,7 @@ jobs:
         uses: anthropics/claude-code-action@beta
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          timeout_minutes: 15
           custom_instructions: |
             You are helping with a pull request. Here's the context:
             
@@ -96,6 +97,8 @@ jobs:
             The user mentioned you in a PR comment with this request: "${{ steps.extract_command.outputs.command }}"
             
             Please help with their request. If you need to make changes to code, do so directly.
+          allowed_tools: "Read,Write,Edit,MultiEdit,Glob,Grep,Bash(git diff*),Bash(git status*),Bash(npm test*),Bash(npm run*),Bash(yarn test*),Bash(python -m pytest*)"
+          disallowed_tools: "Bash(rm *),Bash(sudo *),Bash(curl *),Bash(wget *),Bash(dd *),Bash(git push*),Bash(git reset --hard*)"
       
       - name: Check for changes and commit
         id: check_changes

@@ -173,11 +173,15 @@ jobs:
           script: |
             const currentBranch = '${{ steps.prepare-task.outputs.current_branch }}';
             
+            if (!currentBranch) {
+              throw new Error('Current branch not specified - task preparation may have failed');
+            }
+            
             // Wait a moment for branch to be available on remote
             console.log(`🔍 Verifying branch ${currentBranch} is available on remote...`);
             
             let retries = 0;
-            const maxRetries = 10;
+            const maxRetries = 15;
             
             while (retries < maxRetries) {
               try {
@@ -192,18 +196,28 @@ jobs:
                 
               } catch (error) {
                 retries++;
-                console.log(`⏳ Branch not yet available (attempt ${retries}/${maxRetries}), waiting 2s...`);
+                console.log(`⏳ Branch not yet available (attempt ${retries}/${maxRetries}), waiting 3s...`);
                 
                 if (retries >= maxRetries) {
-                  throw new Error(`Branch ${currentBranch} not available after ${maxRetries} attempts: ${error.message}`);
+                  console.log(`❌ Branch availability check failed after ${maxRetries} attempts`);
+                  console.log(`🔍 Error details: ${error.message}`);
+                  console.log(`🔍 Repository: ${context.repo.owner}/${context.repo.repo}`);
+                  console.log(`🔍 Expected branch: ${currentBranch}`);
+                  
+                  throw new Error(`Branch ${currentBranch} not available after ${maxRetries * 3} seconds. This may indicate:
+                    - Git push operation failed in task preparation
+                    - Network connectivity issues
+                    - GitHub API rate limiting
+                    - Repository permissions issues`);
                 }
                 
-                // Wait 2 seconds before retry
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                // Wait 3 seconds before retry
+                await new Promise(resolve => setTimeout(resolve, 3000));
               }
             }
 
       - name: Implement task with Claude Code Action
+        id: claude-implementation
         if: steps.prepare-task.outputs.task_prepared == 'true'
         uses: anthropics/claude-code-action@beta
         with:
@@ -222,6 +236,37 @@ jobs:
             
             **CONTEXT**: This is task ${{ steps.prepare-task.outputs.task_number }} of ${{ steps.prepare-task.outputs.total_tasks }} in a sequential implementation. Build upon any existing changes from previous tasks if applicable.
           timeout_minutes: 30
+          allowed_tools: "Read,Write,Edit,MultiEdit,Glob,Grep,Bash(git *),Bash(npm *),Bash(yarn *),Bash(node *),Bash(python *),Bash(pip *)"
+          disallowed_tools: "Bash(rm *),Bash(sudo *),Bash(curl *),Bash(wget *),Bash(dd *)"
+
+      - name: Verify Claude Code Action execution
+        if: always() && steps.prepare-task.outputs.task_prepared == 'true'
+        run: |
+          echo "🔍 Checking Claude Code Action execution status..."
+          
+          if [ "${{ steps.claude-implementation.outcome }}" = "failure" ]; then
+            echo "❌ Claude Code Action failed to execute"
+            echo "This could be due to:"
+            echo "  - Authentication token issues"
+            echo "  - Network connectivity problems"
+            echo "  - Claude Code service unavailability"
+            echo "  - Tool access restrictions"
+            echo "  - Timeout exceeded"
+            echo ""
+            echo "🔍 Next steps:"
+            echo "  1. Check workflow logs for specific error messages"
+            echo "  2. Verify CLAUDE_CODE_OAUTH_TOKEN is valid"
+            echo "  3. Ensure allowed_tools includes necessary operations"
+            echo "  4. Consider increasing timeout_minutes if needed"
+            exit 1
+          elif [ "${{ steps.claude-implementation.outcome }}" = "cancelled" ]; then
+            echo "⚠️ Claude Code Action was cancelled"
+            exit 1
+          elif [ "${{ steps.claude-implementation.outcome }}" = "success" ]; then
+            echo "✅ Claude Code Action completed successfully"
+          else
+            echo "⚠️ Claude Code Action completed with unknown status: ${{ steps.claude-implementation.outcome }}"
+          fi
 
       - name: Handle sequential task completion
         if: always() && steps.prepare-task.outputs.task_prepared == 'true'

@@ -36,11 +36,11 @@ jobs:
           token: ${{ secrets.WORKFLOW_TRIGGER_TOKEN || github.token }}
 
       - name: Analyze context with Claude Code
-        uses: anthropics/claude-code-action@v0.0.55
+        id: claude-decomposition
+        uses: anthropics/claude-code-action@beta
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          timeout_minutes: 15
-          max_turns: 5
+          timeout_minutes: 20
           custom_instructions: |
             Create a file named `tasks.json` that breaks down the project requirement into 3-5 sequential implementation tasks.
 
@@ -64,14 +64,36 @@ jobs:
             - Tasks build sequentially on each other
             - Focus on actual implementation, not planning
             - Use specific, actionable titles
-          trigger_phrase: "@claude"
-          label_trigger: "claude"
-          branch_prefix: "claude/"
-          mode: "tag"
-          use_bedrock: false
-          use_vertex: false
-          use_sticky_comment: false
-          use_commit_signing: false
+          allowed_tools: "Write,Read,Edit"
+
+      - name: Verify Claude Code Action execution
+        if: always()
+        run: |
+          echo "🔍 Checking Claude Code Action execution status..."
+          
+          if [ "${{ steps.claude-decomposition.outcome }}" = "failure" ]; then
+            echo "❌ Claude Code Action failed during task decomposition"
+            echo "This could be due to:"
+            echo "  - Authentication token issues (CLAUDE_CODE_OAUTH_TOKEN)"
+            echo "  - Network connectivity problems"
+            echo "  - Claude Code service unavailability"
+            echo "  - Complex or unclear project requirements"
+            echo "  - Timeout exceeded (current: 20 minutes)"
+            echo ""
+            echo "🔍 Suggested fixes:"
+            echo "  1. Verify CLAUDE_CODE_OAUTH_TOKEN is valid and has proper permissions"
+            echo "  2. Simplify project requirements if they're too complex"
+            echo "  3. Check Claude Code service status"
+            echo "  4. Consider increasing timeout if requirements are extensive"
+            exit 1
+          elif [ "${{ steps.claude-decomposition.outcome }}" = "cancelled" ]; then
+            echo "⚠️ Claude Code Action was cancelled during task decomposition"
+            exit 1
+          elif [ "${{ steps.claude-decomposition.outcome }}" = "success" ]; then
+            echo "✅ Claude Code Action completed successfully"
+          else
+            echo "⚠️ Claude Code Action completed with unknown status: ${{ steps.claude-decomposition.outcome }}"
+          fi
 
       - name: Verify tasks.json creation
         if: always()
@@ -83,10 +105,26 @@ jobs:
             echo "  - Complex or unclear project requirements"
             echo "  - Claude Code service unavailable"
             echo "  - Token permissions insufficient"
+            echo "  - Invalid configuration parameters"
+            echo ""
+            echo "🔍 Troubleshooting steps:"
+            echo "  1. Verify CLAUDE_CODE_OAUTH_TOKEN is set correctly"
+            echo "  2. Check workflow logs for Claude Code Action errors"
+            echo "  3. Ensure project requirements are clear and specific"
+            echo "  4. Validate timeout settings are sufficient"
             exit 1
           else
             echo "✅ tasks.json file created successfully"
+            echo "📋 Contents:"
             cat tasks.json
+            echo ""
+            echo "🔍 Validating JSON structure..."
+            if ! jq empty tasks.json 2>/dev/null; then
+              echo "❌ tasks.json contains invalid JSON"
+              exit 1
+            else
+              echo "✅ JSON structure is valid"
+            fi
           fi
 
       - name: Setup sequential task execution
