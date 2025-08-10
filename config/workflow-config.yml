@@ -20,7 +20,7 @@ task_decomposition:
   sequential_settings:
     # Branch naming for sequential tasks
     branch_prefix: "sequential"
-    branch_format: "sequential/task-{task_index}"
+    branch_format: "sequential/issue-{parent_issue}/task-{task_index}"
     
     # State management
     state_file_path: ".github/sequential-tasks-state.json"

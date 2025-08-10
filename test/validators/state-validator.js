@@ -190,7 +190,7 @@ class StateValidator {
     }
 
     // Validate branch naming
-    const expectedBranch = `sequential/task-${taskNumber}`;
+    const expectedBranch = `sequential/issue-${state.parent_issue || 'unknown'}/task-${taskNumber}`;
     if (task.branch !== expectedBranch) {
       validation.valid = false;
       validation.reasons.push(`Incorrect branch name. Expected: ${expectedBranch}, Got: ${task.branch}`);

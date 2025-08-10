@@ -383,7 +383,7 @@ class E2ETestRunner {
       this.log(`✅ Task ${taskIndex + 1} workflow completed`, taskResult);
 
       // Wait for branch to be available
-      const expectedBranch = `sequential/task-${taskIndex + 1}`;
+      const expectedBranch = `sequential/issue-${this.testIssueNumber}/task-${taskIndex + 1}`;
       
       const branchExists = await this.waitForCondition(
         async () => {
@@ -425,7 +425,7 @@ class E2ETestRunner {
         this.log(`✅ PR created for task ${taskIndex + 1}: #${pr.number}`);
         
         // Validate PR base branch
-        const expectedBase = taskIndex === 0 ? 'main' : `sequential/task-${taskIndex}`;
+        const expectedBase = taskIndex === 0 ? 'main' : `sequential/issue-${this.testIssueNumber}/task-${taskIndex}`;
         if (pr.base.ref !== expectedBase) {
           this.log(`⚠️ PR base branch mismatch. Expected: ${expectedBase}, Actual: ${pr.base.ref}`);
         }
@@ -546,7 +546,7 @@ class E2ETestRunner {
     // Validate all expected branches exist
     const expectedBranches = [];
     for (let i = 1; i <= this.testResults.tasksCreated; i++) {
-      expectedBranches.push(`sequential/task-${i}`);
+      expectedBranches.push(`sequential/issue-${this.testIssueNumber}/task-${i}`);
     }
 
     for (const branch of expectedBranches) {

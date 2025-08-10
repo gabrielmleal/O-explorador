@@ -128,7 +128,7 @@ module.exports = async ({ github, context }) => {
       title: task.title,
       body: task.body,
       status: 'pending',
-      branch: `sequential/task-${index + 1}`,
+      branch: `sequential/issue-${parentIssue || 'unknown'}/task-${index + 1}`,
       pr_number: null,
       created_at: new Date().toISOString(),
       completed_at: null,

@@ -65,7 +65,7 @@ async function reconstructStateFromPRs(github, owner, repo, parentIssue) {
           title: `Task ${i + 1} (Reconstructed)`,
           body: 'Task details not available from reconstruction',
           status: 'pending',
-          branch: `sequential/task-${i + 1}`,
+          branch: `sequential/issue-${parentIssue || 'unknown'}/task-${i + 1}`,
           pr_number: null,
           created_at: new Date().toISOString(),
           completed_at: null,

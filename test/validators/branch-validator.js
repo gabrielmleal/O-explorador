@@ -59,7 +59,7 @@ class BranchValidator {
     }
   }
 
-  async validateSequentialBranchStructure(github, owner, repo, expectedTaskCount) {
+  async validateSequentialBranchStructure(github, owner, repo, expectedTaskCount, parentIssue = null) {
     try {
       console.log(`🔍 Validating sequential branch structure for ${expectedTaskCount} tasks...`);
 
@@ -75,7 +75,7 @@ class BranchValidator {
 
       // Check each expected sequential branch
       for (let taskIndex = 1; taskIndex <= expectedTaskCount; taskIndex++) {
-        const branchName = `sequential/task-${taskIndex}`;
+        const branchName = `sequential/issue-${parentIssue || 'unknown'}/task-${taskIndex}`;
         
         try {
           const exists = await this.validateBranchExists(github, owner, repo, branchName);
@@ -105,7 +105,7 @@ class BranchValidator {
 
             // Validate branch ancestry/parent relationships
             if (taskIndex > 1) {
-              const parentBranch = `sequential/task-${taskIndex - 1}`;
+              const parentBranch = `sequential/issue-${parentIssue || 'unknown'}/task-${taskIndex - 1}`;
               const relationship = await this.validateBranchAncestry(
                 github, owner, repo, branchName, parentBranch
               );
@@ -267,7 +267,7 @@ class BranchValidator {
 
       // Filter for sequential task branches
       const sequentialBranches = branches.filter(branch => 
-        branch.name.startsWith('sequential/task-')
+        branch.name.startsWith('sequential/issue-') && branch.name.includes('/task-')
       );
 
       console.log(`📊 Found ${sequentialBranches.length} sequential branches`);

@@ -56,7 +56,7 @@ class PRValidator {
     }
   }
 
-  async validatePRStackStructure(github, owner, repo, expectedTaskCount) {
+  async validatePRStackStructure(github, owner, repo, expectedTaskCount, parentIssue = null) {
     try {
       console.log(`🔍 Validating PR stack structure for ${expectedTaskCount} tasks...`);
 
@@ -72,7 +72,7 @@ class PRValidator {
 
       // Find PRs for each expected task branch
       for (let taskIndex = 1; taskIndex <= expectedTaskCount; taskIndex++) {
-        const branchName = `sequential/task-${taskIndex}`;
+        const branchName = `sequential/issue-${parentIssue || 'unknown'}/task-${taskIndex}`;
         const pr = await this.findPRForBranch(github, owner, repo, branchName);
         
         if (pr) {
@@ -92,7 +92,7 @@ class PRValidator {
           }
           
           // Validate base branch for stacking
-          const expectedBase = taskIndex === 1 ? 'main' : `sequential/task-${taskIndex - 1}`;
+          const expectedBase = taskIndex === 1 ? 'main' : `sequential/issue-${parentIssue || 'unknown'}/task-${taskIndex - 1}`;
           if (pr.base.ref !== expectedBase) {
             validation.stackingCorrect = false;
             validation.reasons.push(
@@ -342,7 +342,7 @@ class PRValidator {
       const sequentialPRs = prs.filter(pr => {
         const createdRecently = new Date(pr.created_at) >= new Date(since);
         const isSequential = pr.labels.some(label => label.name === 'sequential-task') ||
-                           pr.head.ref.includes('sequential/task-') ||
+                           (pr.head.ref.includes('sequential/issue-') && pr.head.ref.includes('/task-')) ||
                            pr.title.includes('Task') ||
                            pr.title.includes('sequential');
         
