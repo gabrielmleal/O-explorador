@@ -1,9 +1,8 @@
 name: Sequential Task Executor
 
 on:
-  repository_dispatch:
-    types: 
-      - execute-sequential-task
+  issue_comment:
+    types: [created]
   workflow_dispatch:
     inputs:
       task_index:
@@ -24,6 +23,9 @@ on:
 jobs:
   execute-task:
     runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' || 
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '[SEQUENTIAL-TASK-TRIGGER]'))
     
     permissions:
       contents: write
@@ -39,6 +41,74 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.WORKFLOW_TRIGGER_TOKEN || github.token }}
 
+      - name: Parse sequential task trigger
+        id: parse-trigger
+        uses: actions/github-script@v7
+        with:
+          script: |
+            let taskIndex, previousBranch, parentIssue, triggerSource;
+            
+            if (context.eventName === 'workflow_dispatch') {
+              // For manual workflow dispatch, use inputs
+              taskIndex = parseInt(context.payload.inputs.task_index || '0');
+              previousBranch = context.payload.inputs.previous_branch || 'main';
+              parentIssue = parseInt(context.payload.inputs.parent_issue);
+              triggerSource = 'manual_workflow_dispatch';
+              
+              console.log('🖱️ Triggered by manual workflow_dispatch');
+              console.log(`   - Task index: ${taskIndex}`);
+              console.log(`   - Previous branch: ${previousBranch}`);
+              console.log(`   - Parent issue: ${parentIssue}`);
+              
+            } else if (context.eventName === 'issue_comment') {
+              // Parse the sequential task trigger comment
+              const commentBody = context.payload.comment.body;
+              console.log('💬 Triggered by issue comment');
+              console.log(`   - Comment: ${commentBody}`);
+              
+              // Extract parameters from comment format: [SEQUENTIAL-TASK-TRIGGER] task_index=1 previous_branch=sequential/task-1 parent_issue=123
+              const triggerMatch = commentBody.match(/\[SEQUENTIAL-TASK-TRIGGER\]\s+(.+)/);
+              if (!triggerMatch) {
+                throw new Error('Invalid sequential task trigger comment format');
+              }
+              
+              const paramString = triggerMatch[1];
+              console.log(`   - Parameters: ${paramString}`);
+              
+              // Parse individual parameters
+              const taskIndexMatch = paramString.match(/task_index=(\d+)/);
+              const previousBranchMatch = paramString.match(/previous_branch=([^\s]+)/);
+              const parentIssueMatch = paramString.match(/parent_issue=(\d+)/);
+              
+              if (!taskIndexMatch || !previousBranchMatch || !parentIssueMatch) {
+                throw new Error('Missing required parameters in sequential task trigger comment');
+              }
+              
+              taskIndex = parseInt(taskIndexMatch[1]);
+              previousBranch = previousBranchMatch[1];
+              parentIssue = parseInt(parentIssueMatch[1]);
+              triggerSource = 'sequential_task_comment';
+              
+              console.log('✅ Parsed trigger parameters:');
+              console.log(`   - Task index: ${taskIndex}`);
+              console.log(`   - Previous branch: ${previousBranch}`);
+              console.log(`   - Parent issue: ${parentIssue}`);
+              
+              // Verify this comment is on the correct issue
+              if (context.payload.issue.number !== parentIssue) {
+                throw new Error(`Comment posted on wrong issue. Expected: ${parentIssue}, Actual: ${context.payload.issue.number}`);
+              }
+            } else {
+              throw new Error(`Unsupported event type: ${context.eventName}`);
+            }
+            
+            // Set outputs for next steps
+            core.setOutput('task_index', taskIndex.toString());
+            core.setOutput('previous_branch', previousBranch);
+            core.setOutput('parent_issue', parentIssue.toString());
+            core.setOutput('trigger_source', triggerSource);
+            core.setOutput('trigger_parsed', 'true');
+
       - name: Prepare task execution environment
         id: prepare-task
         uses: actions/github-script@v7
@@ -51,32 +121,26 @@ jobs:
             const executeSequentialTask = require(path.join(process.cwd(), 'scripts', 'execute-sequential-task.js'));
             
             try {
-              // Debug information
-              console.log('🔍 Workflow Debug Information:');
-              console.log(`   - Event name: ${context.eventName}`);
-              console.log(`   - Action: ${context.payload.action || 'N/A'}`);
-              console.log(`   - Full payload:`, JSON.stringify(context.payload, null, 2));
+              // Use parameters parsed from the trigger (either comment or workflow_dispatch)
+              const taskIndex = parseInt('${{ steps.parse-trigger.outputs.task_index }}');
+              const previousBranch = '${{ steps.parse-trigger.outputs.previous_branch }}';
+              const parentIssue = parseInt('${{ steps.parse-trigger.outputs.parent_issue }}');
+              const triggerSource = '${{ steps.parse-trigger.outputs.trigger_source }}';
               
-              // Handle both repository_dispatch and workflow_dispatch events
-              if (context.eventName === 'repository_dispatch') {
-                console.log('📨 Triggered by repository_dispatch event');
-                console.log(`   - Event type: ${context.payload.action}`);
-                console.log(`   - Client payload:`, context.payload.client_payload);
-              } else if (context.eventName === 'workflow_dispatch') {
-                console.log('🖱️ Triggered by manual workflow_dispatch');
-                console.log(`   - Inputs:`, context.payload.inputs);
-                
-                // For workflow_dispatch, we need to create a mock client_payload from inputs
-                context.payload.client_payload = {
-                  task_index: parseInt(context.payload.inputs.task_index || '0'),
-                  previous_branch: context.payload.inputs.previous_branch || 'main',
-                  parent_issue: parseInt(context.payload.inputs.parent_issue),
-                  trigger_source: 'manual_workflow_dispatch'
-                };
-                console.log('   - Created client_payload from inputs:', context.payload.client_payload);
-              } else {
-                throw new Error(`Unsupported event type: ${context.eventName}. Expected repository_dispatch or workflow_dispatch.`);
-              }
+              console.log('🔍 Sequential Task Execution Parameters:');
+              console.log(`   - Event name: ${context.eventName}`);
+              console.log(`   - Trigger source: ${triggerSource}`);
+              console.log(`   - Task index: ${taskIndex}`);
+              console.log(`   - Previous branch: ${previousBranch}`);
+              console.log(`   - Parent issue: ${parentIssue}`);
+              
+              // Create client_payload equivalent for the executeSequentialTask function
+              context.payload.client_payload = {
+                task_index: taskIndex,
+                previous_branch: previousBranch,
+                parent_issue: parentIssue,
+                trigger_source: triggerSource
+              };
               
               const taskContext = await executeSequentialTask({ github, context, core });
               
@@ -145,43 +209,18 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           custom_instructions: |
-            You are implementing Task ${{ steps.prepare-task.outputs.task_number }} of ${{ steps.prepare-task.outputs.total_tasks }} in a SEQUENTIAL task execution system.
-
-            **CRITICAL CONTEXT**: This task builds on previous tasks changes. You are currently working on branch `${{ steps.prepare-task.outputs.current_branch }}` which was created from `${{ steps.prepare-task.outputs.previous_branch }}`.
-
-            **TASK TO IMPLEMENT**: ${{ steps.prepare-task.outputs.task_title }}
-
-            **SEQUENTIAL EXECUTION CONTEXT**:
-            - Task Index: ${{ steps.prepare-task.outputs.task_number }}/${{ steps.prepare-task.outputs.total_tasks }}
-            - Current Branch: `${{ steps.prepare-task.outputs.current_branch }}`
-            - Base Branch: `${{ steps.prepare-task.outputs.previous_branch }}`
-            - Task Context: Available in `current-task-context.json`
-
-            **INSTRUCTIONS**:
-            1. Read `CLAUDE.md` for project guidelines and understand the sequential task execution system
-            2. **CRITICAL**: Read `current-task-context.json` which contains:
-               - `taskData`: Full task details (title, description, requirements)
-               - `sequentialContext`: The original project context and requirements
-               - `previousTasks`: All completed tasks and their implementations
-               - `taskIndex`/`totalTasks`: Your position in the sequence
-               - `previousBranch`: The branch containing previous tasks' changes
-            3. Examine existing code to understand previous tasks implementations
-            4. Implement this specific task building on existing changes from previous tasks
-            5. Follow project conventions and best practices
-            6. Create/modify all necessary files for this task
-            7. Ensure code is production-ready with proper error handling
-            8. Write tests if the project has testing infrastructure
-
-            **IMPORTANT SEQUENTIAL CONSIDERATIONS**:
-            - You are working with cumulative changes from previous tasks
-            - Use the `sequentialContext` from the context file to understand the overall goal
-            - Review `previousTasks` to understand what has already been implemented
-            - Focus only on implementing this specific task (`taskData.title` and `taskData.body`)
-            - Build upon and integrate with existing code from previous tasks
-            - Do not redo work from previous tasks unless necessary for integration
-            - Your changes will be part of a stacked PR system
-
-            **YOUR GOAL**: Implement working code for this task, not just task descriptions. Create actual files, functions, and implementations that fulfill the task requirements. Use all the context information to understand dependencies and build upon previous work.
+            **TASK**: ${{ steps.prepare-task.outputs.task_title }}
+            
+            **IMPLEMENTATION REQUIRED**: Create actual working code, files, and implementations - not task descriptions or documentation.
+            
+            **SPECIFIC INSTRUCTIONS**:
+            - Examine the existing codebase to understand the project structure
+            - Implement the specific functionality described in the task title
+            - Create or modify all necessary files
+            - Follow existing code patterns and conventions
+            - Ensure all code is functional and production-ready
+            
+            **CONTEXT**: This is task ${{ steps.prepare-task.outputs.task_number }} of ${{ steps.prepare-task.outputs.total_tasks }} in a sequential implementation. Build upon any existing changes from previous tasks if applicable.
           timeout_minutes: 30
 
       - name: Handle sequential task completion
@@ -198,15 +237,25 @@ jobs:
             try {
               console.log('📋 Handling sequential task completion...');
               
-              // Check if current-task-context.json exists (should exist from task preparation)
-              if (!fs.existsSync('current-task-context.json')) {
-                console.log('❌ Current task context file not found');
-                core.setFailed('Task context file missing - cannot handle completion');
-                return;
-              }
+              // Get task context from preparation step outputs
+              const taskIndex = parseInt('${{ steps.prepare-task.outputs.task_index }}');
+              const totalTasks = parseInt('${{ steps.prepare-task.outputs.total_tasks }}');
+              const taskTitle = '${{ steps.prepare-task.outputs.task_title }}';
+              const currentBranch = '${{ steps.prepare-task.outputs.current_branch }}';
+              const previousBranch = '${{ steps.prepare-task.outputs.previous_branch }}';
+              const parentIssue = parseInt('${{ steps.parse-trigger.outputs.parent_issue }}');
               
-              const taskContext = JSON.parse(fs.readFileSync('current-task-context.json', 'utf8'));
-              console.log(`📋 Processing completion for Task ${taskContext.taskIndex + 1}: ${taskContext.taskData.title}`);
+              console.log(`📋 Processing completion for Task ${taskIndex + 1}: ${taskTitle}`);
+              
+              // Create minimal task context for completion handler
+              const taskContext = {
+                taskIndex: taskIndex,
+                totalTasks: totalTasks,
+                taskData: { title: taskTitle },
+                currentBranch: currentBranch,
+                previousBranch: previousBranch,
+                parentIssue: parentIssue
+              };
               
               // Import the task completion handler
               const executeSequentialTask = require(path.join(process.cwd(), 'scripts', 'execute-sequential-task.js'));
@@ -244,11 +293,3 @@ jobs:
               core.setFailed(`Task completion failed: ${error.message}`);
             }
 
-      - name: Upload task artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: sequential-task-${{ steps.prepare-task.outputs.task_number || 'unknown' }}-artifacts
-          path: |
-            current-task-context.json
-          retention-days: 30

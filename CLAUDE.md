@@ -27,9 +27,10 @@ This is an automated sequential workflow system that uses Claude Code to decompo
 
 5. **Sequential Integration Approach**
    - Uses `anthropics/claude-code-action@beta` for task decomposition and implementation
-   - State-driven sequential execution with automatic task chaining
+   - State-driven sequential execution with automatic task chaining via issue comments
    - Creates stacked PRs where each task builds on previous task's branch
-   - Automatic task triggering via `repository_dispatch` events
+   - **Claude Code Action Compatible**: Uses issue comment triggers instead of repository_dispatch
+   - Automatic task coordination through structured comment triggers: `[SEQUENTIAL-TASK-TRIGGER]`
    - Comprehensive error recovery and resume capabilities
 
 ## Development Guidelines
@@ -49,18 +50,24 @@ This is an automated sequential workflow system that uses Claude Code to decompo
 
 ### GitHub Integration
 - Use GitHub tokens securely (never hardcode)
-- **CRITICAL**: Use `WORKFLOW_TRIGGER_TOKEN` (Fine-Grained PAT) for workflow dispatch events to avoid GitHub's workflow triggering restrictions
+- **CRITICAL**: Use `WORKFLOW_TRIGGER_TOKEN` (Fine-Grained PAT) for authenticated operations
 - Regular GitHub operations use default `GITHUB_TOKEN`
+- **IMPORTANT**: Sequential task coordination uses issue comment triggers, not repository_dispatch
+- **Claude Code Compatibility**: Never use repository_dispatch with Claude Code Actions
 - Respect rate limits with appropriate delays
 - Handle GitHub API exceptions gracefully
 - Validate repository access before operations
 - See `WORKFLOW_SETUP.md` for PAT configuration instructions
 
 ### Claude Code Integration
-- Use structured prompts for consistent results
-- Request JSON output when parsing is needed
-- Include relevant context in prompts
-- Set appropriate turn limits for complex tasks
+- Use `custom_instructions` parameter instead of `trigger_phrase` for Claude Code Actions
+- Include comprehensive task context and sequential information in custom instructions
+- Ensure Claude reads `current-task-context.json` for full sequential context
+- Use structured prompts for consistent results with explicit implementation goals
+- **Critical**: Instruct Claude to implement working code, not just task descriptions
+- Request JSON output when parsing is needed for task decomposition
+- Include relevant context and previous task information in prompts
+- Set appropriate timeout limits for complex implementation tasks
 
 ## Implementation Standards
 
@@ -199,23 +206,42 @@ This is an automated sequential workflow system that uses Claude Code to decompo
 ```yaml
 on:
   workflow_dispatch:  # Manual trigger
-  issues:            # Issue events
+  issues:            # Issue events  
     types: [opened, labeled]
-  issue_comment:     # PR comments
+  issue_comment:     # Sequential task coordination
     types: [created]
+```
+
+### Sequential Task Comment Triggers
+Sequential tasks are coordinated via issue comments with this format:
+```
+[SEQUENTIAL-TASK-TRIGGER] task_index=1 previous_branch=sequential/task-1 parent_issue=123
+
+⚡ Sequential Task 2 Starting
+
+Task 1 completed successfully. Automatically triggering next task in sequence.
+
+**Next Task (2)**: [Task Title]
+
+*This is an automated trigger comment - the sequential workflow will now execute the next task.*
 ```
 
 ### Claude Code Action Usage
 ```yaml
-- name: Analyze context with Claude Code
+- name: Implement sequential task
   uses: anthropics/claude-code-action@beta
   with:
     claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
     custom_instructions: |
-      CONTEXT TO ANALYZE: ${{ github.event.inputs.context }}
-      INSTRUCTIONS:
-      1. Read CLAUDE.md and understand the project structure
-      2. Write a JSON file called 'tasks.json' with structured output
+      You are implementing Task ${{ steps.prepare-task.outputs.task_number }} of ${{ steps.prepare-task.outputs.total_tasks }} in a SEQUENTIAL task execution system.
+      
+      **CRITICAL**: Read `current-task-context.json` which contains:
+      - `taskData`: Full task details (title, description, requirements)
+      - `sequentialContext`: The original project context and requirements
+      - `previousTasks`: All completed tasks and their implementations
+      
+      **YOUR GOAL**: Implement working code for this task, not just task descriptions.
+    timeout_minutes: 30
 ```
 
 ### Error Recovery
@@ -273,3 +299,29 @@ try {
 - Write tests for new features
 - Update documentation
 - Submit focused PRs
+
+### Critical Constraints
+- **NEVER use `repository_dispatch`** with Claude Code GitHub Actions - they are incompatible
+- **Always use `custom_instructions`** instead of `trigger_phrase` for Claude Code Actions
+- **Sequential coordination must use issue comment triggers** in format: `[SEQUENTIAL-TASK-TRIGGER] task_index=N ...`
+- **Ensure Claude receives implementation context** via `current-task-context.json` for sequential tasks
+
+## Current System State
+
+### Active Workflows
+1. **context-to-sequential-tasks.yml**: Decomposes requirements into sequential tasks
+2. **sequential-task-executor.yml**: Executes individual tasks with issue comment coordination
+3. **claude-task-implementation.yml**: Handles standalone Claude requests
+4. **claude-pr.yml**: Interactive PR assistant (excludes sequential task PRs)
+5. **sequential-task-recovery.yml**: Recovery and debugging operations
+
+### Coordination Method
+- **Primary**: Issue comment triggers with `[SEQUENTIAL-TASK-TRIGGER]` format
+- **State Storage**: Issue comments with embedded JSON state
+- **Task Context**: `current-task-context.json` file committed to each task branch
+- **PR Strategy**: Stacked PRs building progressively from task to task
+
+### Key Files
+- `scripts/setup-sequential-tasks.js`: Initial task setup and first trigger
+- `scripts/execute-sequential-task.js`: Task execution and next task triggering
+- `scripts/sequential-task-recovery.js`: Recovery operations with comment triggers

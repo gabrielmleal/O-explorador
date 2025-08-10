@@ -248,7 +248,9 @@ ${'---'}
       throw new Error(`Branch creation verification failed. Expected: ${taskBranch}, Actual: ${currentBranch}`);
     }
     
-    // Create task execution context for Claude Code action BEFORE pushing
+    console.log(`📋 Preparing task execution context for Claude Code Action`);
+    
+    // Create simplified task context (keeping minimal info for completion handler)
     const taskContext = {
       taskData: currentTask,
       taskIndex: taskIndex,
@@ -258,28 +260,13 @@ ${'---'}
       parentIssue: sequentialState.parent_issue,
       sequentialContext: sequentialState.context,
       previousTasks: sequentialState.tasks.slice(0, taskIndex),
-      stateCommentId: stateCommentId // Include state comment ID for updates
+      stateCommentId: stateCommentId
     };
-
-    // Save task context for Claude Code action to use
-    console.log(`📋 Creating task context file for Claude Code Action`);
-    fs.writeFileSync('current-task-context.json', JSON.stringify(taskContext, null, 2));
     
-    // Commit the context file to the branch before pushing
-    console.log(`💾 Committing task context to branch`);
-    execSync('git add current-task-context.json');
-    execSync(`git commit -m "Add sequential task context for Task ${taskIndex + 1}: ${currentTask.title}
-
-This context file contains all the information needed for Claude Code Action to understand and complete this sequential task.
-
-Task ${taskIndex + 1}/${sequentialState.tasks.length}: ${currentTask.title}
-Previous branch: ${previousBranch}
-Parent issue: #${sequentialState.parent_issue || 'N/A'}"`);
-    
-    console.log(`✅ Task context committed to branch: ${taskBranch}`);
+    console.log(`✅ Task context prepared (no context file needed - Claude will use direct instructions)`);
 
     // Push branch to remote immediately to ensure Claude Code Action can access it
-    console.log(`🚀 Pushing branch with context to remote origin...`);
+    console.log(`🚀 Pushing branch to remote origin...`);
     execSync(`git push -u origin ${taskBranch}`, { stdio: ['pipe', 'pipe', 'pipe'] });
     console.log(`✅ Successfully pushed branch to remote: ${taskBranch}`);
     
@@ -312,7 +299,7 @@ Parent issue: #${sequentialState.parent_issue || 'N/A'}"`);
   console.log(`🌿 Branch: ${taskBranch}`);
   console.log(`📂 Base: ${previousBranch}`);
   console.log(`🔗 State comment ID: ${stateCommentId}`);
-  console.log(`📄 Context file: current-task-context.json committed and pushed`);
+  console.log(`📋 Task ready for Claude Code Action execution`);
   
   // Return the already-created taskContext
   return {
@@ -376,7 +363,8 @@ module.exports.handleTaskCompletion = async ({ github, context, core, taskContex
     // Still trigger next task
     const nextTaskIndex = taskIndex + 1;
     if (nextTaskIndex < sequentialState.tasks.length) {
-      await triggerNextTask(github, context, nextTaskIndex, currentBranch, workflowToken, taskContext.parentIssue);
+      const nextTaskTitle = sequentialState.tasks[nextTaskIndex]?.title;
+      await triggerNextTask(github, context, nextTaskIndex, currentBranch, workflowToken, taskContext.parentIssue, nextTaskTitle);
     }
     
     return { status: 'no-changes', prNumber: null };
@@ -492,7 +480,8 @@ ${sequentialState.parent_issue ? `\nRelated to: #${sequentialState.parent_issue}
         console.log('Failed to update completed state:', error.message);
       }
       
-      await triggerNextTask(github, context, nextTaskIndex, currentBranch, workflowToken, taskContext.parentIssue);
+      const nextTaskTitle = sequentialState.tasks[nextTaskIndex]?.title;
+      await triggerNextTask(github, context, nextTaskIndex, currentBranch, workflowToken, taskContext.parentIssue, nextTaskTitle);
       
       console.log(`🚀 Triggered next sequential task: ${nextTaskIndex + 1}`);
     } else {
@@ -527,24 +516,28 @@ ${sequentialState.parent_issue ? `\nRelated to: #${sequentialState.parent_issue}
   }
 };
 
-// Helper function to trigger next task
-async function triggerNextTask(github, context, nextTaskIndex, previousBranch, workflowToken, parentIssue) {
-  if (!workflowToken) {
-    throw new Error('WORKFLOW_TRIGGER_TOKEN required to trigger next task');
-  }
-
+// Helper function to trigger next task using issue comment
+async function triggerNextTask(github, context, nextTaskIndex, previousBranch, workflowToken, parentIssue, taskTitle) {
   try {
-    await github.rest.repos.createDispatchEvent({
+    // Create a sequential task trigger comment
+    const triggerComment = `[SEQUENTIAL-TASK-TRIGGER] task_index=${nextTaskIndex} previous_branch=${previousBranch} parent_issue=${parentIssue}
+
+⚡ **Sequential Task ${nextTaskIndex + 1} Starting**
+
+Task ${nextTaskIndex} completed successfully. Automatically triggering next task in sequence.
+
+**Next Task (${nextTaskIndex + 1})**: ${taskTitle || 'Task title not available'}
+
+*This is an automated trigger comment - the sequential workflow will now execute the next task.*`;
+
+    await github.rest.issues.createComment({
       owner: context.repo.owner,
       repo: context.repo.repo,
-      event_type: 'execute-sequential-task',
-      client_payload: {
-        task_index: nextTaskIndex,
-        previous_branch: previousBranch,
-        parent_issue: parentIssue,
-        trigger_source: 'sequential_task_completion'
-      }
+      issue_number: parentIssue,
+      body: triggerComment
     });
+    
+    console.log(`✅ Successfully triggered next task ${nextTaskIndex + 1} via comment`);
   } catch (error) {
     throw new Error(`Failed to trigger next task: ${error.message}`);
   }
