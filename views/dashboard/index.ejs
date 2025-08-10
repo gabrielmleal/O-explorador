@@ -1,0 +1,33 @@
+<div class="dashboard-container">
+    <div class="dashboard-header">
+        <h2>Welcome, <%= user.first_name %>!</h2>
+        <p>This is your dashboard overview.</p>
+    </div>
+
+    <div class="dashboard-content">
+        <div class="dashboard-cards">
+            <div class="card">
+                <h3>Profile Information</h3>
+                <p><strong>Name:</strong> <%= user.first_name %> <%= user.last_name %></p>
+                <p><strong>Username:</strong> <%= user.username %></p>
+                <p><strong>Email:</strong> <%= user.email %></p>
+                <p><strong>Member since:</strong> <%= new Date(user.created_at).toLocaleDateString() %></p>
+                <a href="/profile" class="btn btn-secondary">View Profile</a>
+            </div>
+
+            <div class="card">
+                <h3>Quick Actions</h3>
+                <ul class="action-list">
+                    <li><a href="/profile/edit">Edit Profile</a></li>
+                    <li><a href="/profile">View Full Profile</a></li>
+                </ul>
+            </div>
+
+            <div class="card">
+                <h3>System Status</h3>
+                <p class="status-indicator">✅ All systems operational</p>
+                <p><small>Last updated: <%= new Date().toLocaleString() %></small></p>
+            </div>
+        </div>
+    </div>
+</div>

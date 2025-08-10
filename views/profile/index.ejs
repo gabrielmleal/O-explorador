@@ -1,0 +1,42 @@
+<div class="profile-container">
+    <div class="profile-header">
+        <h2>User Profile</h2>
+    </div>
+
+    <div class="profile-content">
+        <div class="profile-info">
+            <div class="profile-card">
+                <h3>Personal Information</h3>
+                <div class="info-row">
+                    <label>First Name:</label>
+                    <span><%= user.first_name %></span>
+                </div>
+                <div class="info-row">
+                    <label>Last Name:</label>
+                    <span><%= user.last_name %></span>
+                </div>
+                <div class="info-row">
+                    <label>Username:</label>
+                    <span><%= user.username %></span>
+                </div>
+                <div class="info-row">
+                    <label>Email:</label>
+                    <span><%= user.email %></span>
+                </div>
+                <div class="info-row">
+                    <label>Member Since:</label>
+                    <span><%= new Date(user.created_at).toLocaleDateString() %></span>
+                </div>
+                <div class="info-row">
+                    <label>Last Updated:</label>
+                    <span><%= new Date(user.updated_at).toLocaleDateString() %></span>
+                </div>
+            </div>
+
+            <div class="profile-actions">
+                <a href="/profile/edit" class="btn btn-primary">Edit Profile</a>
+                <a href="/dashboard" class="btn btn-secondary">Back to Dashboard</a>
+            </div>
+        </div>
+    </div>
+</div>
