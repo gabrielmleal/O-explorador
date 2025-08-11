@@ -11,6 +11,7 @@ package ObjetosDoMapa;
  * @author Gabriel
  */
 import ElementosGraficos.Animacao;
+import ElementosGraficos.Bloco;
 import ElementosGraficos.MapaDeBlocos;
 import java.awt.Color;
 import java.awt.Font;
@@ -33,8 +34,10 @@ public class Jogador extends ObjetoMapa {
     
     //Atributos de ataques e ações do jogador
     private boolean atirando, atirou, atacando, correndo, terminando;
+    private boolean teleportando;
     private double atacaAlcance;
     private ArrayList<Flecha> flechas;
+    private ArrayList<Explosao> explosoesParaCriar;
     
     //Atributos de animação
     private ArrayList<BufferedImage[]> sprites;
@@ -67,6 +70,7 @@ public class Jogador extends ObjetoMapa {
         
         vida = maxVida = 5;
         flechas = new ArrayList<>();
+        explosoesParaCriar = new ArrayList<>();
         atirou = false;
         
         //inicializa pulo duplo
@@ -114,6 +118,54 @@ public class Jogador extends ObjetoMapa {
         if(!atacando) atirando = true;
     }
     public void corre(boolean b){ correndo = b;}
+    
+    public void teleporta(){
+        teleportando = true;
+    }
+    
+    public ArrayList<Explosao> getExplosoesParaCriar(){
+        return explosoesParaCriar;
+    }
+    
+    public void limparExplosoesParaCriar(){
+        explosoesParaCriar.clear();
+    }
+    
+    private double checaColisaoTeleporte(double startX, double destX, double posY) {
+        // Calcula a direção do movimento
+        double stepSize = 8; // tamanho do passo para verificar colisões (pequeno para precisão)
+        double currentX = startX;
+        double direction = destX > startX ? 1 : -1;
+        
+        // Percorre o caminho em pequenos passos
+        while (Math.abs(currentX - destX) > stepSize) {
+            currentX += stepSize * direction;
+            
+            // Calcula os blocos ao redor da posição de teste
+            int blocoEsquerda = (int)(currentX - clargura / 2) / mb.qualTamanhoDoBloco();
+            int blocoDireita = (int)(currentX + clargura / 2 - 1) / mb.qualTamanhoDoBloco();
+            int blocoCima = (int)(posY - caltura / 2) / mb.qualTamanhoDoBloco();
+            int blocoBaixo = (int)(posY + caltura / 2 - 1) / mb.qualTamanhoDoBloco();
+            
+            // Verifica se a posição está dentro dos limites do mapa
+            if (blocoEsquerda >= 0 && blocoDireita < mb.qualNumDeCols() && 
+                blocoCima >= 0 && blocoBaixo < mb.qualNumDeLinhas()) {
+                
+                // Verifica se algum dos blocos ao redor está bloqueado
+                if (mb.qualTipo(blocoCima, blocoEsquerda) == Bloco.BLOQUEADO ||
+                    mb.qualTipo(blocoCima, blocoDireita) == Bloco.BLOQUEADO ||
+                    mb.qualTipo(blocoBaixo, blocoEsquerda) == Bloco.BLOQUEADO ||
+                    mb.qualTipo(blocoBaixo, blocoDireita) == Bloco.BLOQUEADO) {
+                    
+                    // Se encontrou colisão, retorna a última posição válida
+                    return currentX - (stepSize * direction);
+                }
+            }
+        }
+        
+        // Se chegou aqui, o caminho está livre até o destino
+        return destX;
+    }
     
     public void tentarPuloDuplo(){
         if(podeUsarPuloDuplo && !puloDuploUsado && (acaoAtual == PULANDO || acaoAtual == CAINDO)){
@@ -283,6 +335,39 @@ public class Jogador extends ObjetoMapa {
         
         if(acaoAtual == ATIRANDO){
             if(animacao.checaFoiExecutado()) atirando=false;
+        }
+        
+        //teleportação
+        if(teleportando){
+            double novoX = x;
+            double teleportDistance = 300;
+            
+            // Calcula destino baseado na direção que o jogador está olhando
+            if(olhandoDireita){
+                novoX = x + teleportDistance;
+            } else {
+                novoX = x - teleportDistance;
+            }
+            
+            // Valida se o destino não excede os limites do mapa
+            if(novoX < clargura/2) {
+                novoX = clargura/2;
+            } else if(novoX > mb.qualNumDeCols() * mb.qualTamanhoDoBloco() - clargura/2) {
+                novoX = mb.qualNumDeCols() * mb.qualTamanhoDoBloco() - clargura/2;
+            }
+            
+            // Checa colisão ao longo do caminho de teleporte
+            double teleportFinalX = checaColisaoTeleporte(x, novoX, y);
+            
+            // Cria efeito de fumaça na posição de partida
+            explosoesParaCriar.add(new Explosao(mb, (int)x, (int)y));
+            
+            mudarPosicaoPara(teleportFinalX, y);
+            
+            // Cria efeito de fumaça na posição de chegada
+            explosoesParaCriar.add(new Explosao(mb, (int)teleportFinalX, (int)y));
+            
+            teleportando = false;
         }
         
         //animações
