@@ -7,8 +7,6 @@
 package GerenciadorDeEstados;
 
 import ElementosGraficos.ImagemDeFundo;
-import ElementosGraficos.MapaDeBlocos;
-import Principal.JogoPanel;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.Graphics2D;
@@ -18,13 +16,13 @@ import java.awt.event.KeyEvent;
  *
  * @author Gabriel
  */
-public class EstadoMenu extends Estado {//Estado de menu
+public class EstadoLevelConstructor extends Estado {
     
     //declara uma imagem de fundo
     private ImagemDeFundo fundo;
     
-    //declara um vetor de strings que apresenta as opções do menu
-    private String[] opcoes = {"Jogar", "Level Constructor", "Ajuda","Sair"};
+    //declara um vetor de strings que apresenta as opções do level constructor
+    private String[] opcoes = {"Manual Level Creator", "Auto-Generate Level", "Back to Menu"};
     //declara o valor da escolha atual
     private int escolhaAtual;
     //declara as fontes que serão escritas os dados do menu
@@ -33,10 +31,10 @@ public class EstadoMenu extends Estado {//Estado de menu
     private Color corTitulo, corOpcao, corSelecionado;
     
     //construtor, que é construído a partir de um gerenciador de estados
-    public EstadoMenu(GerenciadorEstado ge){
+    public EstadoLevelConstructor(GerenciadorEstado ge){
         this.ge=ge;
         try{
-            //carrega a imagem de fundo
+            //carrega a mesma imagem de fundo do menu principal
             fundo = new ImagemDeFundo("/Imagens/menubg.gif",1);
             //coloca um movimento automático de 0.1 pixel a cada execução do thread
             fundo.mudarMovimentoAutomatico(-0.1, 0);
@@ -57,10 +55,10 @@ public class EstadoMenu extends Estado {//Estado de menu
     
     //método herdado, que não precisa ser implementado
     public void inicializa(){
-        
+        escolhaAtual = 0; // Reset selection when entering this state
     }
     
-    //método que atualiza a tela do menu
+    //método que atualiza a tela do level constructor
     public void atualiza(){
         //somente as coordenadas do fundo devem ser atualizadas pelo thread
         fundo.atualiza();
@@ -73,7 +71,7 @@ public class EstadoMenu extends Estado {//Estado de menu
         g.setColor(corTitulo);
         g.setFont(fonteTitulo);
         //escreve o título na tela
-        g.drawString("O explorador", 120, 100);
+        g.drawString("Level Constructor", 110, 100);
         
         //muda a fonte para fonte de opções
         g.setFont(fonteOpcoes);
@@ -83,7 +81,7 @@ public class EstadoMenu extends Estado {//Estado de menu
                 e desenhar um triângulo que aponte para a opção
                 */
                 g.setColor(corSelecionado);
-                int[] x = {135,135,140};
+                int[] x = {105,105,110};
                 int[] y = {130+15*i-10,130+15*i,130+15*i-5};
                 g.fillPolygon(x,y,3);
             }
@@ -92,7 +90,7 @@ public class EstadoMenu extends Estado {//Estado de menu
                 g.setColor(corOpcao);
             }
             //desenha a string da opção
-            g.drawString(opcoes[i], 150, 130+15*i);
+            g.drawString(opcoes[i], 120, 130+15*i);
         }
     }
     
@@ -100,16 +98,16 @@ public class EstadoMenu extends Estado {//Estado de menu
     //método auxiliar que seleciona a opção
     public void seleciona(){
         if(escolhaAtual==0){
-            ge.mudarEstado(GerenciadorEstado.ESTADO_LEVEL_1);
+            // TODO: Implementar Manual Level Creator na próxima task
+            System.out.println("Manual Level Creator selected (not implemented yet)");
         }
         else if(escolhaAtual==1){
-            ge.mudarEstado(GerenciadorEstado.ESTADO_LEVEL_CONSTRUCTOR);
-        }
-        else if(escolhaAtual==2){
-            ge.mudarEstado(GerenciadorEstado.ESTADO_AJUDA);
+            // TODO: Implementar Auto-Generate Level na próxima task
+            System.out.println("Auto-Generate Level selected (not implemented yet)");
         }
         else{
-            System.exit(0);
+            // Voltar ao menu principal
+            ge.mudarEstado(GerenciadorEstado.ESTADO_MENU);
         }
     }
     
@@ -133,6 +131,10 @@ public class EstadoMenu extends Estado {//Estado de menu
         if(k==KeyEvent.VK_ENTER){
             //caso seja enter, usa o método auxiliar de selecionar
             seleciona();
+        }
+        if(k==KeyEvent.VK_ESCAPE){
+            //ESC para voltar ao menu principal
+            ge.mudarEstado(GerenciadorEstado.ESTADO_MENU);
         }
     }
     
