@@ -147,7 +147,10 @@ public class Estado_Level1 extends Estado {//classe do estado de level 1
         
          portal.atualiza();
         if(jogador.terminou() && portal.executou()){
-            ge.mudarEstado(0);
+            // Try to load level 2 if it exists, otherwise go to menu
+            if (!ge.carregarLevel(2)) {
+                ge.mudarEstado(GerenciadorEstado.ESTADO_MENU);
+            }
         }
         
         if(portal.checaColisao(jogador)){
