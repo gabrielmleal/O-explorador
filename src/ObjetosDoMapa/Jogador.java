@@ -290,6 +290,33 @@ public class Jogador extends ObjetoMapa {
             if(animacao.checaFoiExecutado()) atirando=false;
         }
         
+        //teleportação
+        if(teleportando){
+            double novoX = x;
+            double teleportDistance = 300;
+            
+            // Calcula destino baseado na direção que o jogador está olhando
+            if(olhandoDireita){
+                novoX = x + teleportDistance;
+            } else {
+                novoX = x - teleportDistance;
+            }
+            
+            // Valida se o destino não excede os limites do mapa
+            if(novoX >= clargura/2 && novoX <= mb.qualNumDeCols() * mb.qualTamanhoDoBloco() - clargura/2){
+                mudarPosicaoPara(novoX, y);
+            } else {
+                // Se exceder os limites, teleporta até o limite válido
+                if(olhandoDireita){
+                    mudarPosicaoPara(mb.qualNumDeCols() * mb.qualTamanhoDoBloco() - clargura/2, y);
+                } else {
+                    mudarPosicaoPara(clargura/2, y);
+                }
+            }
+            
+            teleportando = false;
+        }
+        
         //animações
         
         if(atacando){
