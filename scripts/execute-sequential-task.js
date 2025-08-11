@@ -171,9 +171,14 @@ ${'---'}
   console.log(`🌿 Creating task branch: ${taskBranch}`);
 
   // Prepare sequential branch with accumulated changes from previous tasks
-  console.log(`🔧 Preparing sequential branch building from: ${previousBranch}`);
+  console.log(`🔧 SEQUENTIAL BRANCH PREPARATION`);
+  console.log(`   - Target branch: ${taskBranch}`);
+  console.log(`   - Building from: ${previousBranch}`);
+  console.log(`   - Task index: ${taskIndex} (${taskIndex === 0 ? 'First task' : 'Accumulating from previous tasks'})`);
+  
   try {
     // Fetch latest changes first
+    console.log('📥 Fetching latest remote changes...');
     execSync('git fetch origin');
     
     // Delete existing local branch if it exists
@@ -182,6 +187,7 @@ ${'---'}
       console.log(`🗑️ Deleted existing local branch: ${taskBranch}`);
     } catch (e) {
       // Branch doesn't exist locally, that's fine
+      console.log(`ℹ️  No existing local branch to delete: ${taskBranch}`);
     }
     
     // FIXED: Start from the previous task's branch to accumulate changes sequentially
@@ -348,7 +354,12 @@ ${'---'}
                   fullDiff: fileDiff,
                   // Extract function/method names that were added or modified
                   addedFunctions: extractAddedFunctions(fileDiff),
-                  modifiedFunctions: extractModifiedFunctions(fileDiff)
+                  modifiedFunctions: extractModifiedFunctions(fileDiff),
+                  // NEW: Add code snippets for better context
+                  addedCodeSnippets: extractAddedCodeSnippets(fileDiff),
+                  modifiedCodeSnippets: extractModifiedCodeSnippets(fileDiff),
+                  // Summary of what functionality was implemented
+                  implementationSummary: generateImplementationSummary(file, fileDiff)
                 });
               }
             } catch (diffError) {
@@ -418,6 +429,120 @@ ${'---'}
       return [...new Set(modifiedFunctions)]; // Remove duplicates
     }
     
+    // Helper function to extract added code snippets
+    function extractAddedCodeSnippets(diff) {
+      const snippets = [];
+      const lines = diff.split('\n');
+      let currentSnippet = [];
+      let inAddedBlock = false;
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        
+        if (line.startsWith('+') && !line.startsWith('+++')) {
+          if (!inAddedBlock) {
+            // Start new snippet with some context (previous lines)
+            const contextStart = Math.max(0, i - 2);
+            currentSnippet = lines.slice(contextStart, i).filter(l => !l.startsWith('@@'));
+          }
+          inAddedBlock = true;
+          currentSnippet.push(line);
+        } else if (inAddedBlock && !line.startsWith('-') && !line.startsWith('@@')) {
+          // Add context line
+          currentSnippet.push(line);
+          if (currentSnippet.length > 15) { // Limit snippet size
+            snippets.push(currentSnippet.slice(0, 15).join('\n'));
+            currentSnippet = [];
+            inAddedBlock = false;
+          }
+        } else if (inAddedBlock) {
+          // End of added block
+          if (currentSnippet.length > 3) { // Only keep meaningful snippets
+            snippets.push(currentSnippet.join('\n'));
+          }
+          currentSnippet = [];
+          inAddedBlock = false;
+        }
+      }
+      
+      // Handle final snippet
+      if (currentSnippet.length > 3) {
+        snippets.push(currentSnippet.join('\n'));
+      }
+      
+      return snippets;
+    }
+    
+    // Helper function to extract modified code snippets
+    function extractModifiedCodeSnippets(diff) {
+      const snippets = [];
+      const lines = diff.split('\n');
+      let currentSnippet = [];
+      let inModifiedBlock = false;
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        
+        if ((line.startsWith('+') || line.startsWith('-')) && !line.startsWith('+++') && !line.startsWith('---')) {
+          if (!inModifiedBlock) {
+            // Start new snippet with context
+            const contextStart = Math.max(0, i - 2);
+            currentSnippet = lines.slice(contextStart, i).filter(l => !l.startsWith('@@'));
+          }
+          inModifiedBlock = true;
+          currentSnippet.push(line);
+        } else if (inModifiedBlock && !line.startsWith('@@')) {
+          // Add context line
+          currentSnippet.push(line);
+          if (currentSnippet.length > 20) { // Limit snippet size
+            snippets.push(currentSnippet.slice(0, 20).join('\n'));
+            currentSnippet = [];
+            inModifiedBlock = false;
+          }
+        } else if (inModifiedBlock) {
+          // End of modified block
+          if (currentSnippet.length > 5) { // Only keep meaningful snippets
+            snippets.push(currentSnippet.join('\n'));
+          }
+          currentSnippet = [];
+          inModifiedBlock = false;
+        }
+      }
+      
+      // Handle final snippet
+      if (currentSnippet.length > 5) {
+        snippets.push(currentSnippet.join('\n'));
+      }
+      
+      return snippets;
+    }
+    
+    // Helper function to generate implementation summary
+    function generateImplementationSummary(fileName, diff) {
+      const lines = diff.split('\n');
+      const addedLines = lines.filter(line => line.startsWith('+') && !line.startsWith('+++')).length;
+      const removedLines = lines.filter(line => line.startsWith('-') && !line.startsWith('---')).length;
+      
+      // Extract key implementation patterns
+      const patterns = {
+        functions: (diff.match(/\+.*(?:function|def|public|private)\s+\w+/g) || []).length,
+        classes: (diff.match(/\+.*class\s+\w+/g) || []).length,
+        variables: (diff.match(/\+.*(?:let|const|var|int|String)\s+\w+/g) || []).length,
+        imports: (diff.match(/\+.*(?:import|require|include)/g) || []).length,
+        conditionals: (diff.match(/\+.*(?:if|else|switch|case)/g) || []).length,
+        loops: (diff.match(/\+.*(?:for|while|foreach|do)/g) || []).length
+      };
+      
+      const implementedFeatures = [];
+      if (patterns.functions > 0) implementedFeatures.push(`${patterns.functions} functions`);
+      if (patterns.classes > 0) implementedFeatures.push(`${patterns.classes} classes`);
+      if (patterns.variables > 0) implementedFeatures.push(`${patterns.variables} variables`);
+      if (patterns.conditionals > 0) implementedFeatures.push(`logic with ${patterns.conditionals} conditionals`);
+      if (patterns.loops > 0) implementedFeatures.push(`${patterns.loops} loops`);
+      
+      return `${fileName}: +${addedLines}/-${removedLines} lines. Implemented: ${implementedFeatures.join(', ') || 'code changes'}`;
+    }
+    
     // Create comprehensive context for Claude
     const claudeContext = {
       // Current task information
@@ -450,7 +575,13 @@ ${'---'}
         totalFilesChanged: modifiedFiles.length,
         totalDiffsAnalyzed: diffContext.length,
         functionsAdded: diffContext.reduce((acc, diff) => acc.concat(diff.addedFunctions || []), []),
-        functionsModified: diffContext.reduce((acc, diff) => acc.concat(diff.modifiedFunctions || []), [])
+        functionsModified: diffContext.reduce((acc, diff) => acc.concat(diff.modifiedFunctions || []), []),
+        // NEW: Actual code snippets for better understanding
+        implementationSummaries: diffContext.map(diff => diff.implementationSummary).filter(Boolean),
+        codeSnippetsAdded: diffContext.reduce((acc, diff) => acc.concat(diff.addedCodeSnippets || []), []),
+        codeSnippetsModified: diffContext.reduce((acc, diff) => acc.concat(diff.modifiedCodeSnippets || []), []),
+        // Quick reference for Claude
+        totalCodeSnippets: diffContext.reduce((acc, diff) => acc + (diff.addedCodeSnippets?.length || 0) + (diff.modifiedCodeSnippets?.length || 0), 0)
       },
       
       // Implementation strategy for current task (ENHANCED with diff analysis)
@@ -484,14 +615,16 @@ ${'---'}
     fs.writeFileSync(contextFile, JSON.stringify(claudeContext, null, 2));
     
     console.log(`✅ Context file created: ${contextFile}`);
-    console.log(`📋 Context summary:`);
+    console.log(`📋 Enhanced Context Summary:`);
     console.log(`   - Current task: ${currentTask.title}`);
     console.log(`   - Previous tasks: ${previousImplementations.length}`);
     console.log(`   - Modified files from previous: ${modifiedFiles.length}`);
     console.log(`   - Diff analysis generated: ${diffContext.length} files with detailed diffs`);
     console.log(`   - Functions already implemented: ${diffContext.reduce((acc, diff) => acc + (diff.addedFunctions?.length || 0) + (diff.modifiedFunctions?.length || 0), 0)}`);
-    console.log(`   - Implementation strategy: ${taskIndex > 0 ? 'Build incrementally with detailed diff context' : 'Start from scratch'}`);
-    console.log(`   - Claude will now have comprehensive diff analysis to avoid rework`);
+    console.log(`   - Code snippets provided: ${diffContext.reduce((acc, diff) => acc + (diff.addedCodeSnippets?.length || 0) + (diff.modifiedCodeSnippets?.length || 0), 0)}`);
+    console.log(`   - Implementation summaries: ${diffContext.length} files analyzed`);
+    console.log(`   - Implementation strategy: ${taskIndex > 0 ? 'Build incrementally with code snippets and diff context' : 'Start from scratch'}`);
+    console.log(`   - Claude will now have actual code examples to avoid rework`);
     console.log(`⚠️  Context file created but NOT committed - it's for Claude's use only`);
     
     // IMPORTANT: Do NOT commit the context file - it should not be part of the PR
@@ -593,13 +726,17 @@ module.exports.handleTaskCompletion = async ({ github, context, core, taskContex
   
   const taskData = taskContext.taskData;
   
-  // Detect if Claude created its own branch and use it directly
+  // Detect if Claude created its own branch and handle accordingly
   let actualBranch = currentBranch;
+  let claudeWorkedDirectly = false;
   
   try {
     // Check if Claude created a branch with pattern claude/issue-{parentIssue}-*
     const claudeBranchPattern = `claude/issue-${taskContext.parentIssue}-`;
     console.log(`🔍 Checking for Claude-created branch with pattern: ${claudeBranchPattern}*`);
+    
+    // Fetch latest remote refs to ensure we see new branches
+    execSync('git fetch origin', { stdio: 'pipe' });
     
     // Get all remote branches
     const remoteBranches = execSync('git branch -r', { encoding: 'utf8' });
@@ -609,55 +746,98 @@ module.exports.handleTaskCompletion = async ({ github, context, core, taskContex
       .sort()
       .reverse(); // Most recent first
     
-    console.log(`🔍 Found Claude branches: ${JSON.stringify(claudeBranches)}`);
+    console.log(`🔍 Found ${claudeBranches.length} Claude branches: ${JSON.stringify(claudeBranches)}`);
     
     if (claudeBranches.length > 0) {
-      // Use Claude's branch directly for PR
+      // Claude created its own branch - this is expected behavior
       const claudeBranch = claudeBranches[0];
-      console.log(`✅ Claude created its own branch: ${claudeBranch}`);
-      console.log(`🎯 Using Claude's branch directly for PR (no merging needed)`);
+      console.log(`✅ Claude created branch: ${claudeBranch}`);
+      claudeWorkedDirectly = false; // Claude used our base_branch but created new branch
       
-      // Verify Claude's branch has changes
+      // Verify Claude's branch has meaningful changes
       try {
-        const comparison = execSync(`git rev-list --count main..origin/${claudeBranch}`, { encoding: 'utf8' }).trim();
+        // Compare Claude's branch to our sequential branch (the base it started from)
+        const comparison = execSync(`git rev-list --count origin/${currentBranch}..origin/${claudeBranch}`, { encoding: 'utf8' }).trim();
         const commitsAhead = parseInt(comparison);
         
         if (commitsAhead > 0) {
-          console.log(`📊 Claude's branch has ${commitsAhead} commits ahead of main`);
+          console.log(`📊 Claude's branch has ${commitsAhead} new commits beyond base branch ${currentBranch}`);
           
-          // For sequential continuity, merge Claude's changes back to sequential branch
-          console.log(`🔀 Merging Claude's changes to sequential branch for next task continuity`);
+          // Merge Claude's changes back to sequential branch for next task continuity
+          console.log(`🔀 CRITICAL: Merging Claude's changes back to sequential branch`);
           try {
-            // Switch to sequential branch and merge Claude's changes
+            // Ensure we're on the sequential branch
             execSync(`git checkout ${currentBranch}`);
-            execSync(`git merge origin/${claudeBranch} --no-edit -m "Merge Claude's implementation from ${claudeBranch}"`);
+            execSync(`git reset --hard origin/${currentBranch}`); // Ensure clean state
             
-            console.log(`✅ Merged Claude's changes into sequential branch: ${currentBranch}`);
-            actualBranch = currentBranch; // Use sequential branch with all changes
+            // Merge Claude's changes with a clear commit message
+            execSync(`git merge origin/${claudeBranch} --no-edit -m "Sequential Task ${taskIndex + 1}: Merge implementation from ${claudeBranch}
+
+This merge integrates the actual task implementation from Claude Code Action
+back to the sequential branch to maintain task accumulation for next task.
+
+Task: ${taskContext.taskData.title}"`);
             
-            // Verify final state
+            // Push the updated sequential branch
+            execSync(`git push origin ${currentBranch}`);
+            
+            console.log(`✅ Successfully merged and pushed Claude's changes to sequential branch: ${currentBranch}`);
+            
+            // Use the sequential branch for PR (which now has all accumulated changes)
+            actualBranch = currentBranch;
+            
+            // Verify the final accumulated state
             const finalComparison = execSync(`git rev-list --count main..HEAD`, { encoding: 'utf8' }).trim();
             const finalCommits = parseInt(finalComparison);
-            console.log(`📊 Sequential branch now has ${finalCommits} commits ahead of main`);
+            console.log(`📊 Sequential branch now has ${finalCommits} total commits ahead of main (accumulated)`);
+            
+            // Log what files were accumulated for debugging
+            try {
+              const accumulatedFiles = execSync('git diff --name-only main..HEAD', { encoding: 'utf8' }).trim();
+              if (accumulatedFiles) {
+                const files = accumulatedFiles.split('\n').filter(f => f.trim());
+                console.log(`📁 Accumulated ${files.length} files from all previous tasks:`);
+                files.slice(0, 10).forEach(file => console.log(`     - ${file}`)); // Limit to prevent spam
+                if (files.length > 10) console.log(`     ... and ${files.length - 10} more files`);
+              } else {
+                console.log(`⚠️  No accumulated files detected - this may indicate accumulation failed`);
+              }
+            } catch (e) {
+              console.log('Could not list accumulated files for debugging');
+            }
             
           } catch (mergeError) {
-            console.log(`❌ Failed to merge Claude's changes back: ${mergeError.message}`);
-            console.log(`🔄 Using Claude's branch directly: ${claudeBranch}`);
+            console.log(`❌ CRITICAL ERROR: Failed to merge Claude's changes back: ${mergeError.message}`);
+            console.log(`⚠️  This will break sequential task accumulation!`);
+            console.log(`🔄 Falling back to using Claude's branch directly: ${claudeBranch}`);
             actualBranch = claudeBranch;
+            
+            // Log merge conflict details for debugging
+            try {
+              const conflictFiles = execSync('git diff --name-only --diff-filter=U', { encoding: 'utf8' }).trim();
+              if (conflictFiles) {
+                console.log(`💥 Merge conflicts in files: ${conflictFiles.split('\n').join(', ')}`);
+              }
+            } catch (e) {
+              console.log('Could not determine conflict files');
+            }
           }
         } else {
-          console.log(`⚠️ Claude's branch has no commits ahead of main, using sequential branch`);
+          console.log(`⚠️ Claude's branch has no new commits beyond base - using sequential branch`);
         }
       } catch (comparisonError) {
-        console.log(`⚠️ Could not compare branches, using Claude's branch anyway: ${claudeBranch}`);
+        console.log(`⚠️ Could not compare Claude's branch to base: ${comparisonError.message}`);
+        console.log(`🔄 Using Claude's branch directly: ${claudeBranch}`);
         actualBranch = claudeBranch;
       }
     } else {
-      console.log(`✅ No Claude-specific branch found - Claude worked on sequential branch: ${currentBranch}`);
+      // No Claude-specific branch found - Claude worked directly on our branch
+      console.log(`✅ Claude worked directly on sequential branch: ${currentBranch}`);
+      claudeWorkedDirectly = true;
     }
     
   } catch (error) {
-    console.log(`⚠️ Branch detection failed: ${error.message}`);
+    console.log(`⚠️ Branch detection and merge process failed: ${error.message}`);
     console.log(`🔄 Using sequential branch: ${currentBranch}`);
   }
   

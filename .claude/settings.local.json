@@ -12,7 +12,8 @@
       "Bash(git fetch:*)",
       "Bash(git branch:*)",
       "Bash(gh issue view:*)",
-      "Bash(bash -c 'unset GITHUB_TOKEN GITHUB_USER; gh run view 16857126689 --repo gabrielmleal/explorador --log')"
+      "Bash(bash -c 'unset GITHUB_TOKEN GITHUB_USER; gh run view 16857126689 --repo gabrielmleal/explorador --log')",
+      "Bash(bash:*)"
     ],
     "deny": []
   }
