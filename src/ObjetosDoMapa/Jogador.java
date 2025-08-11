@@ -115,6 +115,11 @@ public class Jogador extends ObjetoMapa {
     }
     public void corre(boolean b){ correndo = b;}
     
+    public void teleporta(){
+        // Teleportation method - implementation will be added in next task
+        // This method will handle teleporting the player 300 pixels in the direction they're facing
+    }
+    
     public void tentarPuloDuplo(){
         if(podeUsarPuloDuplo && !puloDuploUsado && (acaoAtual == PULANDO || acaoAtual == CAINDO)){
             dy = comecoPulo;
