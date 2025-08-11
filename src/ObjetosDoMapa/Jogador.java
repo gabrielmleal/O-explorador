@@ -355,6 +355,81 @@ public class Jogador extends ObjetoMapa {
     
     public boolean estaMorto(){return morto;}
     
+    public void teleporta(){
+        // Calculate teleportation distance (300 pixels)
+        int teleportDistance = 300;
+        
+        // Store departure position for smoke effect
+        int departureX = (int) x;
+        int departureY = (int) y;
+        
+        // Check collision along teleportation path (every 5 pixels)
+        int finalX = (int) x;
+        int step = olhandoDireita ? 5 : -5;
+        int currentX = (int) x;
+        
+        while(Math.abs(currentX - x) < teleportDistance){
+            int nextX = currentX + step;
+            
+            // Check collision at next position using player boundaries
+            int leftBound = nextX - clargura/2;
+            int rightBound = nextX + clargura/2;
+            int topBound = (int) y - caltura/2;
+            int bottomBound = (int) y + caltura/2;
+            
+            // Check if any part of the player would be inside a wall
+            boolean collision = false;
+            for(int checkY = topBound; checkY <= bottomBound; checkY += 5){
+                if(mb.qualBloco(leftBound/mb.qualTamanhoDoBloco(), checkY/mb.qualTamanhoDoBloco()) != 0 ||
+                   mb.qualBloco(rightBound/mb.qualTamanhoDoBloco(), checkY/mb.qualTamanhoDoBloco()) != 0){
+                    collision = true;
+                    break;
+                }
+            }
+            
+            if(collision){
+                break; // Stop teleportation before hitting wall
+            }
+            
+            finalX = nextX;
+            currentX = nextX;
+        }
+        
+        // Teleport player to final safe position
+        if(finalX != x){
+            mudarPosicaoPara(finalX, y);
+            
+            // Store arrival position for smoke effect
+            int arrivalX = finalX;
+            int arrivalY = (int) y;
+            
+            // We'll use a teleport callback to create effects in the Estado
+            setTeleportEffects(departureX, departureY, arrivalX, arrivalY);
+        }
+    }
+    
+    // Store teleportation effect positions for Estado to handle
+    private int teleportDepartureX, teleportDepartureY;
+    private int teleportArrivalX, teleportArrivalY;
+    private boolean needsTeleportEffects = false;
+    
+    private void setTeleportEffects(int depX, int depY, int arrX, int arrY){
+        teleportDepartureX = depX;
+        teleportDepartureY = depY;
+        teleportArrivalX = arrX;
+        teleportArrivalY = arrY;
+        needsTeleportEffects = true;
+    }
+    
+    public boolean needsTeleportEffects(){
+        return needsTeleportEffects;
+    }
+    
+    public int[] getTeleportEffectPositions(){
+        needsTeleportEffects = false;
+        return new int[]{teleportDepartureX, teleportDepartureY, teleportArrivalX, teleportArrivalY};
+    }
+    
     public void desenha(Graphics2D g){
         for(int i=0;i<flechas.size();i++){
             flechas.get(i).desenha(g);

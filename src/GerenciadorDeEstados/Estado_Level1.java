@@ -160,6 +160,16 @@ public class Estado_Level1 extends Estado {//classe do estado de level 1
         ceu.atualiza();
         jogador.atualiza();//atualiza o jogador
         jogador.checaColisoes(inimigos);
+        
+        // Check for teleportation effects
+        if(jogador.needsTeleportEffects()){
+            int[] positions = jogador.getTeleportEffectPositions();
+            // Create explosion at departure location
+            explosoes.add(new Explosao(mb, positions[0], positions[1]));
+            // Create explosion at arrival location
+            explosoes.add(new Explosao(mb, positions[2], positions[3]));
+        }
+        
         terra.mudarPosicaoPara(mb.posX(), mb.posY());//muda o fundo de acordo com a posição do mapa
         mb.mudarPosicaoPara(JogoPanel.LARGURA/2 - jogador.posX() ,JogoPanel.ALTURA/2 - jogador.posY());//muda o map de acordo com a posição do jogador
         for(int i=0;i<inimigos.size();i++){
@@ -210,6 +220,7 @@ public class Estado_Level1 extends Estado {//classe do estado de level 1
         if(k==KeyEvent.VK_Z) jogador.ataca();
         if(k==KeyEvent.VK_X) jogador.atira();
         if(k==KeyEvent.VK_C) jogador.corre(true);
+        if(k==KeyEvent.VK_V) jogador.teleporta();
         if(k==KeyEvent.VK_B) jogador.mudarPosicaoPara(4800, 50);
     }
     
@@ -219,6 +230,10 @@ public class Estado_Level1 extends Estado {//classe do estado de level 1
         if(k==KeyEvent.VK_UP) jogador.Pulando(false);
         if(k==KeyEvent.VK_DOWN) jogador.Baixo(false);
         if(k==KeyEvent.VK_C) jogador.corre(false);
+    }
+    
+    public void adicionarExplosaoTeleporte(int x, int y){
+        explosoes.add(new Explosao(mb, x, y));
     }
     
 }
