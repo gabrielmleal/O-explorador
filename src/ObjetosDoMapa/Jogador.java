@@ -37,6 +37,7 @@ public class Jogador extends ObjetoMapa {
     private boolean teleportando;
     private double atacaAlcance;
     private ArrayList<Flecha> flechas;
+    private ArrayList<Explosao> explosoesParaCriar;
     
     //Atributos de animação
     private ArrayList<BufferedImage[]> sprites;
@@ -69,6 +70,7 @@ public class Jogador extends ObjetoMapa {
         
         vida = maxVida = 5;
         flechas = new ArrayList<>();
+        explosoesParaCriar = new ArrayList<>();
         atirou = false;
         
         //inicializa pulo duplo
@@ -119,6 +121,14 @@ public class Jogador extends ObjetoMapa {
     
     public void teleporta(){
         teleportando = true;
+    }
+    
+    public ArrayList<Explosao> getExplosoesParaCriar(){
+        return explosoesParaCriar;
+    }
+    
+    public void limparExplosoesParaCriar(){
+        explosoesParaCriar.clear();
     }
     
     private double checaColisaoTeleporte(double startX, double destX, double posY) {
@@ -348,7 +358,14 @@ public class Jogador extends ObjetoMapa {
             
             // Checa colisão ao longo do caminho de teleporte
             double teleportFinalX = checaColisaoTeleporte(x, novoX, y);
+            
+            // Cria efeito de fumaça na posição de partida
+            explosoesParaCriar.add(new Explosao(mb, (int)x, (int)y));
+            
             mudarPosicaoPara(teleportFinalX, y);
+            
+            // Cria efeito de fumaça na posição de chegada
+            explosoesParaCriar.add(new Explosao(mb, (int)teleportFinalX, (int)y));
             
             teleportando = false;
         }
