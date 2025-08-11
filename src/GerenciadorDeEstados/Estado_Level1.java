@@ -159,6 +159,11 @@ public class Estado_Level1 extends Estado {//classe do estado de level 1
         }
         ceu.atualiza();
         jogador.atualiza();//atualiza o jogador
+        
+        // Adiciona explosões de teleporte do jogador
+        explosoes.addAll(jogador.getExplosoesParaCriar());
+        jogador.limparExplosoesParaCriar();
+        
         jogador.checaColisoes(inimigos);
         terra.mudarPosicaoPara(mb.posX(), mb.posY());//muda o fundo de acordo com a posição do mapa
         mb.mudarPosicaoPara(JogoPanel.LARGURA/2 - jogador.posX() ,JogoPanel.ALTURA/2 - jogador.posY());//muda o map de acordo com a posição do jogador
@@ -210,6 +215,7 @@ public class Estado_Level1 extends Estado {//classe do estado de level 1
         if(k==KeyEvent.VK_Z) jogador.ataca();
         if(k==KeyEvent.VK_X) jogador.atira();
         if(k==KeyEvent.VK_C) jogador.corre(true);
+        if(k==KeyEvent.VK_V) jogador.teleporta();
         if(k==KeyEvent.VK_B) jogador.mudarPosicaoPara(4800, 50);
     }
     
