@@ -1,295 +1,41 @@
-# Sequential Task Execution Configuration
-# Configuration settings for the automated sequential workflow system
+# Sequential Task Execution Configuration - Simplified
+# Essential configuration for the automated sequential workflow system
 
-# Task Decomposition Settings
-task_decomposition:
-  # Maximum number of tasks to generate from a single context
+# Task Settings
+task_settings:
   max_tasks_default: 10
   max_tasks_limit: 25
-  
-  # Complexity thresholds (in estimated hours)
-  complexity_thresholds:
-    low: 2      # <= 2 hours
-    medium: 8   # 2-8 hours
-    high: 24    # > 8 hours
-  
-  # Task size preferences
-  preferred_task_size: "medium"  # small, medium, large
-  
-  # Sequential execution settings
-  sequential_settings:
-    # Branch naming for sequential tasks
-    branch_prefix: "sequential"
-    branch_format: "sequential/issue-{parent_issue}/task-{task_index}"
-    
-    # State management
-    state_file_path: ".github/sequential-tasks-state.json"
-    preserve_state_on_failure: true
-    enable_state_recovery: true
-    
-    # Task chaining
-    auto_trigger_next_task: true
-    task_completion_delay_seconds: 2
-    max_chain_length: 20
+  branch_prefix: "sequential"
+  auto_trigger_next_task: true
 
-# Sequential PR Settings
-pr_creation:
-  # Sequential PR configuration
-  sequential_pr_settings:
-    # Sequential PR labels
-    labels:
-      - "claude-generated"
-      - "sequential-task"
-      - "needs-review"
-    
-    # PR stacking configuration
-    enable_stacked_prs: true
-    base_branch_strategy: "previous_task" # previous_task or main
-    include_previous_changes_context: true
-    
-    # PR naming for sequential tasks
-    title_format: "[Sequential] Task {task_number}: {task_title}"
-    include_sequence_info: true
-  
-  # PR settings
-  create_draft: false
-  auto_merge: false
-  delete_branch_on_merge: true
-  
-  # Review settings
-  request_reviews: true
-  reviewers: []  # Add GitHub usernames
-  team_reviewers: []  # Add team slugs
-  
-  # PR template
-  include_implementation_log: true
-  include_test_checklist: true
-  include_issue_link: true
+# PR Settings
+pr_settings:
+  labels:
+    - "claude-generated"
+    - "sequential-task"
+    - "needs-review"
+  enable_stacked_prs: true
+  base_branch_strategy: "previous_task"
+  title_format: "[Sequential] Task {task_number}: {task_title}"
 
 # Claude Code Settings
 claude:
-  # Model settings
-  model: "claude-sonnet-4-20250514"
-  max_tokens: 4096
-  temperature: 0.7
-  
-  # Query settings
-  max_turns: 3
-  output_mode: "text"  # text, json, stream
-  
-  # System prompts
-  use_custom_system_prompt: true
-  system_prompt_file: "CLAUDE.md"
-  
-  # Extended thinking
-  enable_extended_thinking: true
-  thinking_keywords:
-    - "think"
-    - "analyze"
-    - "plan"
-  
-  # Cost optimization
-  use_caching: true
-  cache_ttl_minutes: 15
-  
-  # Error handling
-  retry_on_error: true
+  timeout_minutes: 30
   max_retries: 3
   retry_delay_seconds: 5
 
 # GitHub Integration
 github:
-  # API settings
-  api_version: "v3"
-  per_page: 100
-  
-  # Rate limiting
   respect_rate_limits: true
-  rate_limit_delay_ms: 1000
-  
-  # PR settings
   squash_merge: true
-  merge_commit_title: "conventional"  # conventional, pr_title, custom
-  
-  # Notifications
-  notify_on_success: true
-  notify_on_failure: true
 
-# Workflow Triggers
-triggers:
-  # Sequential context trigger
-  sequential_context:
-    enabled: true
-    label: "sequential-context"
-    process_edits: true
-    workflow_file: "context-to-sequential-tasks.yml"
-  
-  # Sequential task execution trigger
-  sequential_task_execution:
-    enabled: true
-    event_type: "execute-sequential-task"
-    workflow_file: "sequential-task-executor.yml"
-  
-  # PR assistant trigger
-  pr_assistant:
-    enabled: true
-    mention: "@claude"
-    respond_to_reviews: true
-    respond_to_comments: true
-
-# Monitoring and Logging
-monitoring:
-  # Logging level
-  log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR
-  
-  # Metrics collection
-  collect_metrics: true
-  metrics_endpoint: ""  # Optional metrics endpoint
-  
-  # Error reporting
-  report_errors: true
-  error_webhook: ""  # Optional webhook for errors
-  
-  # Performance tracking
-  track_execution_time: true
-  track_api_usage: true
-  track_costs: true
-
-# Security Settings
+# Security
 security:
-  # Token validation
-  validate_tokens: true
-  token_min_length: 40
-  
-  # Input validation
   validate_inputs: true
   max_input_length: 100000
-  sanitize_html: true
-  
-  # Branch protection
-  protect_main_branch: true
-  require_pr_reviews: true
-  dismiss_stale_reviews: true
-  
-  # Audit logging
-  enable_audit_log: true
-  audit_log_retention_days: 90
 
-# Performance Settings
+# Performance
 performance:
-  # Sequential execution limits
-  max_sequential_workflows: 1  # Only one sequential chain at a time
-  max_parallel_api_calls: 3    # API calls within a single workflow can still be parallel
-  
-  # Timeouts (in seconds)
-  workflow_timeout: 3600  # 1 hour
-  api_timeout: 300  # 5 minutes
-  claude_timeout: 600  # 10 minutes
-  
-  # Resource limits
-  max_memory_mb: 2048
-  max_cpu_cores: 2
-  
-  # Caching
-  enable_caching: true
-  cache_provider: "memory"  # memory, redis, disk
-  cache_ttl_minutes: 60
-
-# Feature Flags
-features:
-  # Experimental features
-  use_claude_subagents: false
-  enable_task_clustering: false
-  smart_dependency_detection: false
-  
-  # Beta features
-  auto_test_generation: false
-  documentation_generation: false
-  code_review_automation: false
-  
-  # Advanced features
-  multi_repo_support: false
-  cross_reference_issues: false
-  milestone_tracking: false
-
-# Notification Settings
-notifications:
-  # Slack integration
-  slack:
-    enabled: false
-    webhook_url: ""
-    channel: "#dev-automation"
-    notify_on:
-      - "sequential_task_decomposition_complete"
-      - "sequential_pr_created"
-      - "sequential_execution_complete"
-      - "error"
-  
-  # Email notifications
-  email:
-    enabled: false
-    smtp_server: ""
-    from_address: ""
-    to_addresses: []
-    notify_on:
-      - "sequential_workflow_complete"
-      - "sequential_workflow_failed"
-  
-  # GitHub notifications
-  github:
-    enabled: true
-    notify_assignees: true
-    notify_mentions: true
-
-# Cost Management
-cost_management:
-  # Budget limits
-  daily_token_limit: 1000000
-  monthly_token_limit: 30000000
-  
-  # Cost alerts
-  alert_at_percentage: 80
-  stop_at_percentage: 100
-  
-  # Optimization
-  prefer_cheaper_models: false
-  adaptive_model_selection: false
-  
-  # Tracking
-  track_per_user: false
-  track_per_project: true
-  generate_cost_reports: true
-
-# Recovery Settings
-recovery:
-  # State recovery
-  enable_auto_recovery: true
-  recovery_retry_limit: 3
-  
-  # Backup settings
-  backup_sequential_state: true
-  state_backup_retention_days: 7
-  
-  # Artifact backup
-  backup_artifacts: true
-  artifact_retention_days: 30
-
-# Sequential Execution Environments
-environments:
-  development:
-    max_tasks_default: 5
-    create_draft_prs: true
-    enable_debug_logging: true
-  
-  staging:
-    max_tasks_default: 10
-    create_draft_prs: true
-    enable_debug_logging: false
-  
-  production:
-    max_tasks_default: 15
-    create_draft_prs: false
-    enable_debug_logging: false
-
-# Default environment
-default_environment: "production"
+  workflow_timeout: 3600
+  api_timeout: 300
+  claude_timeout: 1800
