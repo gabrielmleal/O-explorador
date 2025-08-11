@@ -174,8 +174,14 @@ public class EstadoLevelConstructor extends Estado {
                 inEditorMode = false;
                 showInterfaces = true;
             } else if(k==KeyEvent.VK_SPACE) {
-                // SPACE saves level (placeholder for Task 5)
-                // TODO: Implement level saving in Task 5
+                // SPACE saves level from manual editor
+                String savedFile = LevelSaver.saveLevelFromEditor(levelEditor);
+                if (savedFile != null) {
+                    // Level saved successfully, return to menu
+                    inEditorMode = false;
+                    showInterfaces = false;
+                    ge.mudarEstado(GerenciadorEstado.ESTADO_MENU);
+                }
             } else {
                 // Pass other keys to level editor
                 levelEditor.handleKeyPressed(k);
@@ -188,8 +194,14 @@ public class EstadoLevelConstructor extends Estado {
                 showGeneratedLevel = false;
                 showInterfaces = true;
             } else if(k==KeyEvent.VK_SPACE) {
-                // SPACE saves generated level (placeholder for Task 5)
-                // TODO: Implement level saving in Task 5
+                // SPACE saves generated level
+                String savedFile = LevelSaver.saveLevelFromGenerator(generatedLevel);
+                if (savedFile != null) {
+                    // Level saved successfully, return to menu
+                    showGeneratedLevel = false;
+                    showInterfaces = false;
+                    ge.mudarEstado(GerenciadorEstado.ESTADO_MENU);
+                }
             } else if(k==KeyEvent.VK_R) {
                 // R key regenerates level with same settings
                 generateLevel();

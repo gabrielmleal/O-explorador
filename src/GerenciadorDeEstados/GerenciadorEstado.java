@@ -40,6 +40,39 @@ public class GerenciadorEstado {
         estadoAtual = estado;
         estados.get(estadoAtual).inicializa();
     }
+    
+    /**
+     * Add a new state dynamically (used for created levels)
+     * @param estado The state to add
+     */
+    public void adicionarEstado(Estado estado) {
+        estados.add(estado);
+    }
+    
+    /**
+     * Get the list of states (used for accessing dynamically added states)
+     * @return The list of states
+     */
+    public ArrayList<Estado> getEstados() {
+        return estados;
+    }
+    
+    /**
+     * Load and switch to a specific level by number
+     * Creates a generic level state if the level exists
+     * @param levelNumber The level number to load (2, 3, 4, etc.)
+     * @return true if level was loaded successfully, false otherwise
+     */
+    public boolean carregarLevel(int levelNumber) {
+        if (LevelSaver.levelExists(levelNumber)) {
+            // Create new generic level state
+            EstadoLevelGenerico levelState = new EstadoLevelGenerico(this, levelNumber);
+            adicionarEstado(levelState);
+            mudarEstado(estados.size() - 1); // Switch to the newly added state
+            return true;
+        }
+        return false;
+    }
     public void atualiza(){
         estados.get(estadoAtual).atualiza();
     }

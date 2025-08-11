@@ -24,7 +24,8 @@ public class EstadoMenu extends Estado {//Estado de menu
     private ImagemDeFundo fundo;
     
     //declara um vetor de strings que apresenta as opções do menu
-    private String[] opcoes = {"Jogar", "Level Constructor", "Ajuda","Sair"};
+    private String[] opcoes;
+    private int[] levelNumbers; // Maps menu options to level numbers
     //declara o valor da escolha atual
     private int escolhaAtual;
     //declara as fontes que serão escritas os dados do menu
@@ -57,7 +58,47 @@ public class EstadoMenu extends Estado {//Estado de menu
     
     //método herdado, que não precisa ser implementado
     public void inicializa(){
+        // Update the menu options based on available levels
+        atualizarOpcoes();
+    }
+    
+    /**
+     * Updates menu options based on available levels
+     */
+    private void atualizarOpcoes() {
+        java.util.ArrayList<String> opcoesList = new java.util.ArrayList<>();
+        java.util.ArrayList<Integer> levelsList = new java.util.ArrayList<>();
         
+        // Add level options based on available levels
+        int totalLevels = LevelSaver.getTotalLevelCount();
+        for (int i = 1; i <= totalLevels; i++) {
+            if (i == 1) {
+                opcoesList.add("Jogar"); // Level 1 is still called "Jogar"
+            } else {
+                opcoesList.add("Level " + i);
+            }
+            levelsList.add(i);
+        }
+        
+        // Add non-level options
+        opcoesList.add("Level Constructor");
+        levelsList.add(-1); // Special value for Level Constructor
+        opcoesList.add("Ajuda");
+        levelsList.add(-2); // Special value for Help
+        opcoesList.add("Sair");
+        levelsList.add(-3); // Special value for Exit
+        
+        // Convert to arrays
+        opcoes = opcoesList.toArray(new String[0]);
+        levelNumbers = new int[levelsList.size()];
+        for (int i = 0; i < levelsList.size(); i++) {
+            levelNumbers[i] = levelsList.get(i);
+        }
+        
+        // Reset selection if it's out of bounds
+        if (escolhaAtual >= opcoes.length) {
+            escolhaAtual = 0;
+        }
     }
     
     //método que atualiza a tela do menu
@@ -99,16 +140,23 @@ public class EstadoMenu extends Estado {//Estado de menu
     
     //método auxiliar que seleciona a opção
     public void seleciona(){
-        if(escolhaAtual==0){
-            ge.mudarEstado(GerenciadorEstado.ESTADO_LEVEL_1);
-        }
-        else if(escolhaAtual==1){
+        int levelNumber = levelNumbers[escolhaAtual];
+        
+        if (levelNumber > 0) {
+            // This is a level option
+            if (levelNumber == 1) {
+                ge.mudarEstado(GerenciadorEstado.ESTADO_LEVEL_1);
+            } else {
+                ge.carregarLevel(levelNumber);
+            }
+        } else if (levelNumber == -1) {
+            // Level Constructor
             ge.mudarEstado(GerenciadorEstado.ESTADO_LEVEL_CONSTRUCTOR);
-        }
-        else if(escolhaAtual==2){
+        } else if (levelNumber == -2) {
+            // Help
             ge.mudarEstado(GerenciadorEstado.ESTADO_AJUDA);
-        }
-        else{
+        } else if (levelNumber == -3) {
+            // Exit
             System.exit(0);
         }
     }
