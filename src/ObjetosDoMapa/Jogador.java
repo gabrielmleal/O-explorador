@@ -33,6 +33,7 @@ public class Jogador extends ObjetoMapa {
     
     //Atributos de ataques e ações do jogador
     private boolean atirando, atirou, atacando, correndo, terminando;
+    private boolean teleportando;
     private double atacaAlcance;
     private ArrayList<Flecha> flechas;
     
@@ -114,6 +115,10 @@ public class Jogador extends ObjetoMapa {
         if(!atacando) atirando = true;
     }
     public void corre(boolean b){ correndo = b;}
+    
+    public void teleporta(){
+        teleportando = true;
+    }
     
     public void tentarPuloDuplo(){
         if(podeUsarPuloDuplo && !puloDuploUsado && (acaoAtual == PULANDO || acaoAtual == CAINDO)){
