@@ -320,9 +320,10 @@ ${'---'}
     // Analyze what files were changed in previous tasks to provide context
     let previousImplementations = [];
     let modifiedFiles = [];
+    let diffContext = [];
     
     if (taskIndex > 0) {
-      console.log(`🔍 Analyzing previous task implementations for context...`);
+      console.log(`🔍 Analyzing previous task implementations for comprehensive context...`);
       
       // Get list of files that were modified from main to current branch
       try {
@@ -330,22 +331,91 @@ ${'---'}
         if (filesList) {
           modifiedFiles = filesList.split('\n').filter(f => f.trim());
           console.log(`📁 Files modified in previous tasks: ${modifiedFiles.length} files`);
+          
+          // Get actual diff content for each modified file
+          console.log(`🔍 Generating diff analysis for previous implementations...`);
+          for (const file of modifiedFiles) {
+            try {
+              // Get the actual diff for this file from main to current branch
+              const fileDiff = execSync(`git diff main..HEAD -- "${file}"`, { encoding: 'utf8' });
+              if (fileDiff.trim()) {
+                // Get a summary of changes using git diff --stat for this file
+                const diffStat = execSync(`git diff --stat main..HEAD -- "${file}"`, { encoding: 'utf8' }).trim();
+                
+                diffContext.push({
+                  file: file,
+                  diffSummary: diffStat,
+                  fullDiff: fileDiff,
+                  // Extract function/method names that were added or modified
+                  addedFunctions: extractAddedFunctions(fileDiff),
+                  modifiedFunctions: extractModifiedFunctions(fileDiff)
+                });
+              }
+            } catch (diffError) {
+              console.log(`⚠️ Could not get diff for file ${file}: ${diffError.message}`);
+            }
+          }
+          console.log(`📊 Generated diff analysis for ${diffContext.length} files with changes`);
         }
       } catch (error) {
         console.log(`⚠️ Could not analyze file changes: ${error.message}`);
       }
       
-      // Create implementation summaries for previous tasks
+      // Create implementation summaries for previous tasks with enhanced context
       sequentialState.tasks.slice(0, taskIndex).forEach((task, idx) => {
+        const implementation = task.implementation || {};
         previousImplementations.push({
           taskNumber: idx + 1,
           title: task.title,
           description: task.body,
           status: task.status,
           branch: task.branch,
-          completedAt: task.completed_at
+          completedAt: task.completed_at,
+          filesCreated: implementation.filesCreated || [],
+          filesModified: implementation.filesModified || [],
+          functionalityImplemented: implementation.functionalityImplemented || [task.title],
+          implementationSummary: implementation.implementationSummary || `Implemented "${task.title}"`,
+          codeChangesCount: implementation.codeChangesCount || null
         });
       });
+    }
+    
+    // Helper function to extract added functions from diff
+    function extractAddedFunctions(diff) {
+      const addedFunctions = [];
+      const lines = diff.split('\n');
+      for (const line of lines) {
+        if (line.startsWith('+') && !line.startsWith('+++')) {
+          // Look for function/method patterns in added lines
+          const functionMatch = line.match(/\+.*(?:function|def|class|public|private|protected)[\s\w]*([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(/);
+          if (functionMatch) {
+            addedFunctions.push(functionMatch[1]);
+          }
+        }
+      }
+      return [...new Set(addedFunctions)]; // Remove duplicates
+    }
+    
+    // Helper function to extract modified functions from diff
+    function extractModifiedFunctions(diff) {
+      const modifiedFunctions = [];
+      const lines = diff.split('\n');
+      let currentFunction = null;
+      
+      for (const line of lines) {
+        // Track function context
+        const functionMatch = line.match(/^[+-].*(?:function|def|class|public|private|protected)[\s\w]*([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(/);
+        if (functionMatch) {
+          currentFunction = functionMatch[1];
+        }
+        
+        // If we're in a function context and see modifications
+        if (currentFunction && (line.startsWith('+') || line.startsWith('-')) && !line.startsWith('+++') && !line.startsWith('---')) {
+          modifiedFunctions.push(currentFunction);
+          currentFunction = null; // Reset after finding modification
+        }
+      }
+      return [...new Set(modifiedFunctions)]; // Remove duplicates
     }
     
     // Create comprehensive context for Claude
@@ -371,15 +441,31 @@ ${'---'}
       // Previous task implementations (CRITICAL for avoiding re-implementation)
       previousImplementations: previousImplementations,
       
-      // Files that have been modified by previous tasks
+      // Files that have been modified by previous tasks (legacy compatibility)
       modifiedFiles: modifiedFiles,
       
-      // Implementation strategy for current task
+      // ENHANCED: Detailed diff analysis from previous tasks
+      previousImplementationDetails: {
+        modifiedFiles: diffContext,
+        totalFilesChanged: modifiedFiles.length,
+        totalDiffsAnalyzed: diffContext.length,
+        functionsAdded: diffContext.reduce((acc, diff) => acc.concat(diff.addedFunctions || []), []),
+        functionsModified: diffContext.reduce((acc, diff) => acc.concat(diff.modifiedFunctions || []), [])
+      },
+      
+      // Implementation strategy for current task (ENHANCED with diff analysis)
       implementationStrategy: {
         buildOnPrevious: taskIndex > 0,
         implementOnlyCurrentTask: true,
         avoidReDevelopment: taskIndex > 0,
-        scopeBoundary: `Implement only the functionality described in "${currentTask.title}" - do NOT re-implement features from previous tasks`
+        scopeBoundary: `Implement only the functionality described in "${currentTask.title}" - do NOT re-implement features from previous tasks`,
+        // NEW: Specific guidance based on previous implementations
+        doNotImplement: taskIndex > 0 ? previousImplementations.flatMap(impl => impl.functionalityImplemented) : [],
+        buildUpon: taskIndex > 0 ? {
+          existingFiles: modifiedFiles,
+          existingFunctions: diffContext.reduce((acc, diff) => acc.concat(diff.addedFunctions || [], diff.modifiedFunctions || []), []),
+          lastImplementation: previousImplementations.length > 0 ? previousImplementations[previousImplementations.length - 1] : null
+        } : null
       },
       
       // Metadata for completion tracking
@@ -388,11 +474,12 @@ ${'---'}
         stateCommentId: stateCommentId,
         createdAt: new Date().toISOString(),
         taskBranch: taskBranch,
-        baseBranch: previousBranch
+        baseBranch: previousBranch,
+        diffAnalysisGenerated: diffContext.length > 0
       }
     };
     
-    // Write context file for Claude
+    // Write context file for Claude (DO NOT commit this file - it's for Claude's use only)
     const contextFile = 'current-task-context.json';
     fs.writeFileSync(contextFile, JSON.stringify(claudeContext, null, 2));
     
@@ -401,18 +488,14 @@ ${'---'}
     console.log(`   - Current task: ${currentTask.title}`);
     console.log(`   - Previous tasks: ${previousImplementations.length}`);
     console.log(`   - Modified files from previous: ${modifiedFiles.length}`);
-    console.log(`   - Implementation strategy: ${taskIndex > 0 ? 'Build incrementally' : 'Start from scratch'}`);
-    console.log(`   - Claude will now have full context about previous implementations`);
+    console.log(`   - Diff analysis generated: ${diffContext.length} files with detailed diffs`);
+    console.log(`   - Functions already implemented: ${diffContext.reduce((acc, diff) => acc + (diff.addedFunctions?.length || 0) + (diff.modifiedFunctions?.length || 0), 0)}`);
+    console.log(`   - Implementation strategy: ${taskIndex > 0 ? 'Build incrementally with detailed diff context' : 'Start from scratch'}`);
+    console.log(`   - Claude will now have comprehensive diff analysis to avoid rework`);
+    console.log(`⚠️  Context file created but NOT committed - it's for Claude's use only`);
     
-    // Commit the context file so it's available to Claude without blocking branch operations
-    execSync(`git add ${contextFile}`);
-    execSync(`git commit -m "Add task context for Claude Code Action
-
-Task ${taskIndex + 1}: ${currentTask.title}
-Context file contains implementation details for sequential task execution.
-
-🤖 Generated by Sequential Task Executor"`);
-    console.log(`📝 Context file committed and ready for Claude Code Action access`);
+    // IMPORTANT: Do NOT commit the context file - it should not be part of the PR
+    // Claude Code Action can access files in the working directory without them being committed
 
     // Push branch to remote immediately to ensure Claude Code Action can access it
     console.log(`🚀 Pushing branch to remote origin...`);
@@ -617,17 +700,76 @@ module.exports.handleTaskCompletion = async ({ github, context, core, taskContex
       return { status: 'no-changes', prNumber: null };
     }
 
-    // Commit and push changes on sequential branch
+    // Commit and push changes on sequential branch with file validation
     console.log('💾 Committing changes to sequential branch...');
     
+    // Clean up temporary files before committing
+    console.log('🧹 Cleaning temporary files before commit...');
+    const tempFilesToRemove = [
+      'current-task-context.json',
+      'output.txt',
+      'task-output.txt', 
+      'claude-output.txt',
+      'tasks.json',
+      '.claude-context'
+    ];
+    
+    for (const pattern of tempFilesToRemove) {
+      try {
+        if (fs.existsSync(pattern)) {
+          fs.unlinkSync(pattern);
+          console.log(`🗑️  Removed temporary file: ${pattern}`);
+        }
+      } catch (error) {
+        // File doesn't exist or couldn't be removed, that's fine
+      }
+    }
+    
+    // Get list of all changes and filter out unwanted files
+    console.log('🔍 Validating files to be committed...');
+    const statusOutput = execSync('git status --porcelain', { encoding: 'utf8' });
+    const changedFiles = statusOutput.trim().split('\n')
+      .filter(line => line.trim())
+      .map(line => line.substring(3).trim()) // Remove git status prefix
+      .filter(file => {
+        // Filter out temporary/unwanted files
+        const unwantedPatterns = [
+          /^current-task-context\.json$/,
+          /^output\.txt$/,
+          /^task-output\.txt$/,
+          /^claude-output\.txt$/,
+          /^tasks\.json$/,
+          /^\.claude-context/,
+          /\.tmp$/,
+          /\.temp$/,
+          /^\.debug-/
+        ];
+        
+        return !unwantedPatterns.some(pattern => pattern.test(file));
+      });
+    
+    console.log(`📋 Files to be committed: ${changedFiles.length}`);
+    changedFiles.forEach(file => console.log(`   - ${file}`));
+    
+    if (changedFiles.length === 0) {
+      console.log('⚠️ No valid files to commit after filtering');
+      return { status: 'no-changes', prNumber: null };
+    }
+    
+    // Add only the validated files
+    for (const file of changedFiles) {
+      execSync(`git add "${file}"`);
+    }
+    
     // Commit changes
-    execSync('git add -A');
     execSync(`git commit -m "Sequential Task ${taskIndex + 1}: ${taskData.title}
 
 ${taskData.body}
 
 This task builds on previous changes from:
 ${taskContext.previousTasks.map(t => `- Task ${t.id}: ${t.title}`).join('\n') || '- Starting from main branch'}
+
+Files modified: ${changedFiles.join(', ')}
 
 🤖 Generated with Claude Code Sequential Executor
 Co-authored-by: Claude <claude@anthropic.com>"`);
@@ -723,8 +865,13 @@ ${sequentialState.parent_issue ? `\nRelated to: #${sequentialState.parent_issue}
       const changedFiles = execSync(`git diff --name-only ${previousBranch}..HEAD`, { encoding: 'utf8' }).trim();
       const modifiedFiles = changedFiles ? changedFiles.split('\n').filter(f => f.trim()) : [];
       
-      // Get detailed diff stats
-      const diffStats = execSync(`git diff --stat ${previousBranch}..HEAD`, { encoding: 'utf8' }).trim();
+      // Get detailed diff stats (for logging purposes)
+      try {
+        const diffStats = execSync(`git diff --stat ${previousBranch}..HEAD`, { encoding: 'utf8' }).trim();
+        console.log(`📊 Diff statistics: ${diffStats.split('\n').length} lines of changes`);
+      } catch (error) {
+        console.log('⚠️ Could not generate diff statistics:', error.message);
+      }
       const diffSummary = execSync(`git diff --numstat ${previousBranch}..HEAD`, { encoding: 'utf8' }).trim();
       
       // Count code changes
@@ -843,6 +990,7 @@ ${sequentialState.parent_issue ? `\nRelated to: #${sequentialState.parent_issue}
 
 // Helper function to trigger next task using issue comment
 async function triggerNextTask(github, context, nextTaskIndex, previousBranch, workflowToken, parentIssue, taskTitle) {
+  // Note: workflowToken parameter kept for future compatibility but not currently used
   try {
     console.log(`🚀 Triggering next task: ${nextTaskIndex + 1}`);
     console.log(`   - Previous branch: ${previousBranch}`);
