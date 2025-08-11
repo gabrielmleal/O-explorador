@@ -115,6 +115,53 @@ public class Jogador extends ObjetoMapa {
     }
     public void corre(boolean b){ correndo = b;}
     
+    public void teleporta(){
+        // Teleportation method - implementing movement calculation with collision detection
+        // Teleports the player 300 pixels in the direction they're facing
+        
+        int teleportDistance = 300;
+        double targetX = x;
+        
+        // Calculate target position based on facing direction
+        if(olhandoDireita) {
+            targetX = x + teleportDistance;
+        } else {
+            targetX = x - teleportDistance;
+        }
+        
+        // Check collision along teleportation path
+        double stepSize = 5.0; // Check collision every 5 pixels
+        double currentX = x;
+        double finalX = x;
+        
+        // Determine direction multiplier
+        int direction = olhandoDireita ? 1 : -1;
+        
+        // Check collision step by step along the teleportation path
+        while(Math.abs(currentX - x) < teleportDistance) {
+            double testX = currentX + (stepSize * direction);
+            double tempXOld = xtemp;
+            
+            // Temporarily set position to test collision
+            xtemp = testX;
+            ytemp = y;
+            
+            // Check for collision at this position
+            if(mb.qualBloco((int)((testX + clargura/2) / mb.qualTamanhoDoBloco()), (int)((y + caltura/2) / mb.qualTamanhoDoBloco())) != 0 ||
+               mb.qualBloco((int)((testX - clargura/2) / mb.qualTamanhoDoBloco()), (int)((y + caltura/2) / mb.qualTamanhoDoBloco())) != 0) {
+                // Collision detected, stop here
+                break;
+            }
+            
+            // No collision, update final position
+            finalX = testX;
+            currentX = testX;
+        }
+        
+        // Set the player to the final safe position
+        mudarPosicaoPara(finalX, y);
+    }
+    
     public void tentarPuloDuplo(){
         if(podeUsarPuloDuplo && !puloDuploUsado && (acaoAtual == PULANDO || acaoAtual == CAINDO)){
             dy = comecoPulo;
