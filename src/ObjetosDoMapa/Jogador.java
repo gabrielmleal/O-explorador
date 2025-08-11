@@ -27,6 +27,12 @@ public class Jogador extends ObjetoMapa {
     private boolean morto, imune;
     private long temporizadorImune;
     
+    // atributos de teletransporte
+    private boolean teletransportando;
+    private long temporizadorTeleporte;
+    private double teleporteOrigemX, teleporteOrigemY;
+    private double teleporteDestinoX, teleporteDestinoY;
+    
     //atributos do pulo duplo
     private boolean podeUsarPuloDuplo;
     private boolean puloDuploUsado;
@@ -73,6 +79,10 @@ public class Jogador extends ObjetoMapa {
         podeUsarPuloDuplo = false;
         puloDuploUsado = false;
         
+        // inicializa teletransporte
+        teletransportando = false;
+        temporizadorTeleporte = 0;
+        
         atacaAlcance = 35;
         
         try{
@@ -114,6 +124,82 @@ public class Jogador extends ObjetoMapa {
         if(!atacando) atirando = true;
     }
     public void corre(boolean b){ correndo = b;}
+    
+    public void teleporta(){
+        if(teletransportando) return; // Evita teletransporte múltiplo
+        
+        // Armazena posição de origem para efeito de fumaça
+        teleporteOrigemX = x;
+        teleporteOrigemY = y;
+        
+        // Calcula destino (300 pixels na direção que está olhando)
+        double destinoX = x;
+        if(olhandoDireita) {
+            destinoX = x + 300;
+        } else {
+            destinoX = x - 300;
+        }
+        
+        // Verifica colisão passo a passo até encontrar posição segura
+        double finalX = x;
+        double stepSize = 5; // Verifica a cada 5 pixels
+        
+        if(olhandoDireita) {
+            for(double testX = x; testX <= destinoX; testX += stepSize) {
+                // Testa colisão nas bordas do jogador
+                double testeEsquerda = testX - clargura/2;
+                double testeDireita = testX + clargura/2;
+                double testeTopo = y - caltura/2;
+                double testeBase = y + caltura/2;
+                
+                // Verifica se qualquer parte do jogador colidiria
+                if(mb.qualBloco((int)testeEsquerda/mb.qualTamanhoDoBloco(), (int)testeTopo/mb.qualTamanhoDoBloco()) != 0 ||
+                   mb.qualBloco((int)testeDireita/mb.qualTamanhoDoBloco(), (int)testeTopo/mb.qualTamanhoDoBloco()) != 0 ||
+                   mb.qualBloco((int)testeEsquerda/mb.qualTamanhoDoBloco(), (int)testeBase/mb.qualTamanhoDoBloco()) != 0 ||
+                   mb.qualBloco((int)testeDireita/mb.qualTamanhoDoBloco(), (int)testeBase/mb.qualTamanhoDoBloco()) != 0) {
+                    break; // Para antes da colisão
+                }
+                finalX = testX;
+            }
+        } else {
+            for(double testX = x; testX >= destinoX; testX -= stepSize) {
+                // Testa colisão nas bordas do jogador
+                double testeEsquerda = testX - clargura/2;
+                double testeDireita = testX + clargura/2;
+                double testeTopo = y - caltura/2;
+                double testeBase = y + caltura/2;
+                
+                // Verifica se qualquer parte do jogador colidiria
+                if(mb.qualBloco((int)testeEsquerda/mb.qualTamanhoDoBloco(), (int)testeTopo/mb.qualTamanhoDoBloco()) != 0 ||
+                   mb.qualBloco((int)testeDireita/mb.qualTamanhoDoBloco(), (int)testeTopo/mb.qualTamanhoDoBloco()) != 0 ||
+                   mb.qualBloco((int)testeEsquerda/mb.qualTamanhoDoBloco(), (int)testeBase/mb.qualTamanhoDoBloco()) != 0 ||
+                   mb.qualBloco((int)testeDireita/mb.qualTamanhoDoBloco(), (int)testeBase/mb.qualTamanhoDoBloco()) != 0) {
+                    break; // Para antes da colisão
+                }
+                finalX = testX;
+            }
+        }
+        
+        // Se não pode se mover, não faz teletransporte
+        if(Math.abs(finalX - x) < 10) return;
+        
+        // Armazena posições para efeitos de fumaça
+        teleporteDestinoX = finalX;
+        teleporteDestinoY = y;
+        
+        // Inicia animação de teletransporte
+        teletransportando = true;
+        temporizadorTeleporte = System.nanoTime();
+        
+        // Move o jogador imediatamente (a animação visual será controlada pelo desenha())
+        mudarPosicaoPara(finalX, y);
+    }
+    
+    public boolean estaTeletransportando() { return teletransportando; }
+    public double getTeleporteOrigemX() { return teleporteOrigemX; }
+    public double getTeleporteOrigemY() { return teleporteOrigemY; }
+    public double getTeleporteDestinoX() { return teleporteDestinoX; }
+    public double getTeleporteDestinoY() { return teleporteDestinoY; }
     
     public void tentarPuloDuplo(){
         if(podeUsarPuloDuplo && !puloDuploUsado && (acaoAtual == PULANDO || acaoAtual == CAINDO)){
@@ -350,6 +436,15 @@ public class Jogador extends ObjetoMapa {
             if(direita) olhandoDireita = true;
             if(esquerda) olhandoDireita = false;
         }
+        
+        // Atualiza estado do teletransporte
+        if(teletransportando) {
+            long diferencaTempo = (System.nanoTime() - temporizadorTeleporte) / 1000000;
+            if(diferencaTempo > 200) { // 200ms de duração da animação
+                teletransportando = false;
+            }
+        }
+        
         if(vida==0) morto = true;
     }
     
@@ -368,6 +463,17 @@ public class Jogador extends ObjetoMapa {
             long diferencaTempo = (System.nanoTime()-temporizadorImune)/1000000;
             if(diferencaTempo/70%2==0) return;
         }
-        super.desenha(g);
+        
+        // Efeito visual durante teletransporte
+        if(teletransportando) {
+            long diferencaTempo = (System.nanoTime() - temporizadorTeleporte) / 1000000;
+            // Cria efeito de transparência/oscilação durante teletransporte
+            if(diferencaTempo / 20 % 2 == 0) {
+                // Desenha com transparência alternada para efeito visual
+                super.desenha(g);
+            }
+        } else {
+            super.desenha(g);
+        }
     }
 }

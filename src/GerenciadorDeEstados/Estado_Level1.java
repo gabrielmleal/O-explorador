@@ -33,6 +33,9 @@ public class Estado_Level1 extends Estado {//classe do estado de level 1
     private ArrayList<Explosao> explosoes;
     private Portal portal;
     
+    // Lista para armazenar efeitos de teletransporte pendentes
+    private ArrayList<double[]> efeitosTeleportesPendentes;
+    
     private int contadorFase;
     private ArrayList<Rectangle> tb;
     private boolean comecaFase;
@@ -68,6 +71,7 @@ public class Estado_Level1 extends Estado {//classe do estado de level 1
         
         
         explosoes = new ArrayList<>();
+        efeitosTeleportesPendentes = new ArrayList<>();
         
         portal = new Portal(mb);
         portal.mudarPosicaoPara(4875, 165);
@@ -172,6 +176,34 @@ public class Estado_Level1 extends Estado {//classe do estado de level 1
             }
         }
         
+        // Gerencia efeitos de teletransporte
+        if(jogador.estaTeletransportando()) {
+            // Adiciona efeitos de fumaça quando começa o teletransporte
+            double[] origem = {jogador.getTeleporteOrigemX(), jogador.getTeleporteOrigemY()};
+            double[] destino = {jogador.getTeleporteDestinoX(), jogador.getTeleporteDestinoY()};
+            
+            // Verifica se já foram adicionados os efeitos para este teletransporte
+            boolean efeitosJaAdicionados = false;
+            for(double[] pendente : efeitosTeleportesPendentes) {
+                if(Math.abs(pendente[0] - origem[0]) < 1 && Math.abs(pendente[1] - origem[1]) < 1) {
+                    efeitosJaAdicionados = true;
+                    break;
+                }
+            }
+            
+            if(!efeitosJaAdicionados) {
+                // Adiciona efeito de fumaça na origem (onde desapareceu)
+                explosoes.add(new Explosao(mb, origem[0], origem[1]));
+                // Adiciona efeito de fumaça no destino (onde apareceu)
+                explosoes.add(new Explosao(mb, destino[0], destino[1]));
+                // Marca este teletransporte como processado
+                efeitosTeleportesPendentes.add(origem);
+            }
+        } else {
+            // Limpa a lista quando não está teletransportando
+            efeitosTeleportesPendentes.clear();
+        }
+        
         for(int i=0;i<explosoes.size();i++){
             explosoes.get(i).atualiza();
             if(explosoes.get(i).deveRemover()){
@@ -210,6 +242,7 @@ public class Estado_Level1 extends Estado {//classe do estado de level 1
         if(k==KeyEvent.VK_Z) jogador.ataca();
         if(k==KeyEvent.VK_X) jogador.atira();
         if(k==KeyEvent.VK_C) jogador.corre(true);
+        if(k==KeyEvent.VK_V) jogador.teleporta(); // Teletransporte com V
         if(k==KeyEvent.VK_B) jogador.mudarPosicaoPara(4800, 50);
     }
     
