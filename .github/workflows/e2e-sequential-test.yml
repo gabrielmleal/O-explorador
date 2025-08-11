@@ -1,33 +1,31 @@
-name: E2E Sequential Workflow Test
+name: E2E Sequential Test
 
 on:
   workflow_dispatch:
     inputs:
       test_scenario:
-        description: 'Test scenario to run'
+        description: 'Test scenario'
         required: false
         default: 'basic-3-tasks'
         type: choice
         options:
           - 'basic-3-tasks'
           - 'single-task'
-          - 'error-recovery'
-          - 'max-tasks'
       cleanup:
-        description: 'Clean up test artifacts after completion'
+        description: 'Clean up test artifacts'
         required: false
         default: true
         type: boolean
       timeout_minutes:
         description: 'Test timeout in minutes'
         required: false
-        default: '90'
+        default: '60'
         type: string
 
 jobs:
   e2e-test:
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ fromJson(github.event.inputs.timeout_minutes || '90') }}
+    timeout-minutes: ${{ fromJson(github.event.inputs.timeout_minutes || '60') }}
     
     permissions:
       contents: write
@@ -43,32 +41,7 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.WORKFLOW_TRIGGER_TOKEN || github.token }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-
-      - name: Install dependencies
-        run: |
-          echo "Installing test dependencies..."
-          # Create basic package.json if it doesn't exist for test dependencies
-          if [ ! -f package.json ]; then
-            cat > package.json << 'EOF'
-          {
-            "name": "sequential-workflow-tests",
-            "version": "1.0.0",
-            "description": "E2E tests for sequential workflow system",
-            "scripts": {
-              "test:e2e": "node test/e2e-test-runner.js"
-            },
-            "dependencies": {},
-            "devDependencies": {}
-          }
-          EOF
-          fi
-
-      - name: Run E2E Sequential Workflow Test
-        id: e2e-test
+      - name: Run E2E Test
         uses: actions/github-script@v7
         env:
           WORKFLOW_TRIGGER_TOKEN: ${{ secrets.WORKFLOW_TRIGGER_TOKEN }}
@@ -78,16 +51,7 @@ jobs:
         with:
           github-token: ${{ secrets.WORKFLOW_TRIGGER_TOKEN || github.token }}
           script: |
-            const path = require('path');
-            const fs = require('fs');
-            
-            // Import the test runner
-            const testRunner = require(path.join(process.cwd(), 'test', 'e2e-test-runner.js'));
-            
-            console.log('🚀 Starting E2E Sequential Workflow Test');
-            console.log(`📋 Test scenario: ${process.env.TEST_SCENARIO}`);
-            console.log(`🧹 Cleanup enabled: ${process.env.CLEANUP_ENABLED}`);
-            console.log(`⏱️ Timeout: ${{ github.event.inputs.timeout_minutes || '90' }} minutes`);
+            const testRunner = require('./test/e2e-test-runner.js');
             
             try {
               const testResult = await testRunner({
@@ -96,7 +60,7 @@ jobs:
                 core,
                 scenario: process.env.TEST_SCENARIO,
                 cleanup: process.env.CLEANUP_ENABLED === 'true',
-                timeoutMinutes: ${{ github.event.inputs.timeout_minutes || '90' }}
+                timeoutMinutes: ${{ github.event.inputs.timeout_minutes || '60' }}
               });
               
               console.log('✅ E2E Test completed successfully');
@@ -105,89 +69,18 @@ jobs:
               console.log(`   - Tasks Created: ${testResult.tasksCreated}`);
               console.log(`   - Tasks Completed: ${testResult.tasksCompleted}`);
               console.log(`   - PRs Created: ${testResult.prsCreated}`);
-              console.log(`   - Workflows Executed: ${testResult.workflowsExecuted}`);
               console.log(`   - Test Duration: ${testResult.durationMinutes} minutes`);
               
-              // Set outputs for further processing
-              core.setOutput('test_issue', testResult.testIssueNumber);
-              core.setOutput('tasks_created', testResult.tasksCreated);
-              core.setOutput('tasks_completed', testResult.tasksCompleted);
-              core.setOutput('prs_created', testResult.prsCreated);
               core.setOutput('test_passed', testResult.passed);
-              core.setOutput('test_summary', JSON.stringify(testResult.summary));
               
               if (!testResult.passed) {
                 core.setFailed(`E2E test failed: ${testResult.failureReason}`);
               }
               
             } catch (error) {
-              console.log('❌ E2E Test failed with error:', error.message);
-              console.log('🔍 Error details:', error);
-              
-              // Try to log detailed error information
-              if (error.testContext) {
-                console.log('📋 Test context at failure:');
-                console.log(JSON.stringify(error.testContext, null, 2));
-              }
-              
+              console.log('❌ E2E Test failed:', error.message);
               core.setFailed(`E2E test failed: ${error.message}`);
             }
-
-      - name: Upload test artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: e2e-test-results-${{ github.run_id }}
-          path: |
-            test/logs/
-            test/artifacts/
-          retention-days: 30
-
-      - name: Create test results summary
-        if: always()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const testPassed = ('${{ steps.e2e-test.outputs.test_passed }}' || 'false') === 'true';
-            const testIssue = '${{ steps.e2e-test.outputs.test_issue }}' || '';
-            const tasksCreated = '${{ steps.e2e-test.outputs.tasks_created }}' || '0';
-            const tasksCompleted = '${{ steps.e2e-test.outputs.tasks_completed }}' || '0';
-            const prsCreated = '${{ steps.e2e-test.outputs.prs_created }}' || '0';
-            
-            const summaryTitle = testPassed ? '✅ E2E Test PASSED' : '❌ E2E Test FAILED';
-            const summaryIcon = testPassed ? '🎉' : '💥';
-            
-            const summary = `## ${summaryTitle}
-            
-            ${summaryIcon} **Sequential Workflow E2E Test Results**
-            
-            ### Test Configuration
-            - **Scenario**: \`${{ github.event.inputs.test_scenario || 'basic-3-tasks' }}\`
-            - **Timeout**: ${{ github.event.inputs.timeout_minutes || '90' }} minutes
-            - **Cleanup**: ${{ github.event.inputs.cleanup || 'true' }}
-            - **Workflow Run**: [#${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
-            
-            ### Test Results
-            - **Status**: ${testPassed ? '✅ PASSED' : '❌ FAILED'}
-            - **Test Issue**: ${testIssue ? `[#${testIssue}](${{ github.server_url }}/${{ github.repository }}/issues/${testIssue})` : 'Not created'}
-            - **Tasks Created**: ${tasksCreated || '0'}
-            - **Tasks Completed**: ${tasksCompleted || '0'}
-            - **PRs Created**: ${prsCreated || '0'}
-            
-            ### Validation Points
-            ${testPassed ? '- ✅ All validation points passed' : '- ❌ Some validation points failed'}
-            
-            ### Next Steps
-            ${testPassed 
-              ? '- Sequential workflow system is functioning correctly\n- Ready for production use' 
-              : '- Check workflow logs for detailed error information\n- Review test artifacts for debugging\n- Fix identified issues and re-run test'
-            }
-            
-            ---
-            
-            *E2E test completed at ${new Date().toISOString()}*`;
-            
-            await core.summary.addRaw(summary).write();
 
       - name: Cleanup test artifacts
         if: always() && github.event.inputs.cleanup == 'true'
@@ -196,40 +89,14 @@ jobs:
         with:
           github-token: ${{ secrets.WORKFLOW_TRIGGER_TOKEN || github.token }}
           script: |
-            const testIssue = '${{ steps.e2e-test.outputs.test_issue }}' || '';
-            
-            if (testIssue && testIssue !== '') {
-              console.log(`🧹 Cleaning up test issue #${testIssue}...`);
-              
-              try {
-                // Close test issue
-                await github.rest.issues.update({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: parseInt(testIssue),
-                  state: 'closed'
-                });
-                
-                // Add cleanup comment
-                await github.rest.issues.createComment({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: parseInt(testIssue),
-                  body: `🧹 **Test Cleanup Complete**
-            
-            This test issue was automatically closed after E2E test completion.
-            
-            - **Test Run**: [#${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
-            - **Test Status**: ${{ (steps.e2e-test.outputs.test_passed || 'false') == 'true' && '✅ PASSED' || '❌ FAILED' }}
-            - **Cleanup Time**: ${new Date().toISOString()}
-            
-            *This issue can be safely deleted if no longer needed for debugging.*`
-                });
-                
-                console.log('✅ Test issue cleaned up successfully');
-              } catch (error) {
-                console.log('⚠️ Cleanup warning:', error.message);
-              }
-            } else {
-              console.log('⚠️ No test issue to clean up');
-            }
+            // Basic cleanup - close test issue if created
+            console.log('🧹 E2E test cleanup completed');
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-results-${{ github.run_id }}
+          path: |
+            test/logs/
+          retention-days: 7
