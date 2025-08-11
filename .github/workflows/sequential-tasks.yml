@@ -213,6 +213,7 @@ jobs:
               core.setOutput('task_number', (taskContext.taskIndex + 1).toString());
               core.setOutput('total_tasks', taskContext.totalTasks.toString());
               core.setOutput('current_branch', taskContext.currentBranch);
+              core.setOutput('state_comment_id', taskContext.stateCommentId);
               core.setOutput('task_prepared', 'true');
               
             } catch (error) {
@@ -264,7 +265,8 @@ jobs:
                 taskIndex: parseInt('${{ steps.prepare-task.outputs.task_number }}') - 1,
                 currentBranch: '${{ steps.prepare-task.outputs.current_branch }}',
                 previousBranch: '${{ needs.determine-action.outputs.previous_branch }}',
-                parentIssue: parseInt('${{ needs.determine-action.outputs.parent_issue }}')
+                parentIssue: parseInt('${{ needs.determine-action.outputs.parent_issue }}'),
+                stateCommentId: '${{ steps.prepare-task.outputs.state_comment_id }}'
               };
               
               const result = await handleTaskCompletion({ github, context, core, taskContext });
