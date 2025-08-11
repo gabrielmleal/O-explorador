@@ -7,8 +7,6 @@
 package GerenciadorDeEstados;
 
 import ElementosGraficos.ImagemDeFundo;
-import ElementosGraficos.MapaDeBlocos;
-import Principal.JogoPanel;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.Graphics2D;
@@ -18,13 +16,13 @@ import java.awt.event.KeyEvent;
  *
  * @author Gabriel
  */
-public class EstadoMenu extends Estado {//Estado de menu
+public class EstadoLevelConstructor extends Estado {
     
     //declara uma imagem de fundo
     private ImagemDeFundo fundo;
     
-    //declara um vetor de strings que apresenta as opções do menu
-    private String[] opcoes = {"Jogar", "Level Constructor", "Ajuda","Sair"};
+    //declara um vetor de strings que apresenta as opções do level constructor
+    private String[] opcoes = {"Manual Constructor", "Auto-generator", "Voltar"};
     //declara o valor da escolha atual
     private int escolhaAtual;
     //declara as fontes que serão escritas os dados do menu
@@ -33,7 +31,7 @@ public class EstadoMenu extends Estado {//Estado de menu
     private Color corTitulo, corOpcao, corSelecionado;
     
     //construtor, que é construído a partir de um gerenciador de estados
-    public EstadoMenu(GerenciadorEstado ge){
+    public EstadoLevelConstructor(GerenciadorEstado ge){
         this.ge=ge;
         try{
             //carrega a imagem de fundo
@@ -57,10 +55,10 @@ public class EstadoMenu extends Estado {//Estado de menu
     
     //método herdado, que não precisa ser implementado
     public void inicializa(){
-        
+        escolhaAtual = 0; // Reseta a seleção quando entra no estado
     }
     
-    //método que atualiza a tela do menu
+    //método que atualiza a tela do level constructor
     public void atualiza(){
         //somente as coordenadas do fundo devem ser atualizadas pelo thread
         fundo.atualiza();
@@ -73,7 +71,7 @@ public class EstadoMenu extends Estado {//Estado de menu
         g.setColor(corTitulo);
         g.setFont(fonteTitulo);
         //escreve o título na tela
-        g.drawString("O explorador", 120, 100);
+        g.drawString("Level Constructor", 90, 100);
         
         //muda a fonte para fonte de opções
         g.setFont(fonteOpcoes);
@@ -83,8 +81,8 @@ public class EstadoMenu extends Estado {//Estado de menu
                 e desenhar um triângulo que aponte para a opção
                 */
                 g.setColor(corSelecionado);
-                int[] x = {135,135,140};
-                int[] y = {130+15*i-10,130+15*i,130+15*i-5};
+                int[] x = {125,125,130};
+                int[] y = {130+20*i-10,130+20*i,130+20*i-5};
                 g.fillPolygon(x,y,3);
             }
             else{
@@ -92,7 +90,7 @@ public class EstadoMenu extends Estado {//Estado de menu
                 g.setColor(corOpcao);
             }
             //desenha a string da opção
-            g.drawString(opcoes[i], 150, 130+15*i);
+            g.drawString(opcoes[i], 140, 130+20*i);
         }
     }
     
@@ -100,16 +98,16 @@ public class EstadoMenu extends Estado {//Estado de menu
     //método auxiliar que seleciona a opção
     public void seleciona(){
         if(escolhaAtual==0){
-            ge.mudarEstado(GerenciadorEstado.ESTADO_LEVEL_1);
+            // Manual Constructor - Será implementado na próxima task
+            // TODO: Implementar estado de construção manual
         }
         else if(escolhaAtual==1){
-            ge.mudarEstado(GerenciadorEstado.ESTADO_LEVEL_CONSTRUCTOR);
-        }
-        else if(escolhaAtual==2){
-            ge.mudarEstado(GerenciadorEstado.ESTADO_AJUDA);
+            // Auto-generator - Será implementado na próxima task
+            // TODO: Implementar estado de auto-geração
         }
         else{
-            System.exit(0);
+            // Voltar para o menu principal
+            ge.mudarEstado(GerenciadorEstado.ESTADO_MENU);
         }
     }
     
@@ -133,6 +131,10 @@ public class EstadoMenu extends Estado {//Estado de menu
         if(k==KeyEvent.VK_ENTER){
             //caso seja enter, usa o método auxiliar de selecionar
             seleciona();
+        }
+        if(k==KeyEvent.VK_ESCAPE){
+            //ESC volta para o menu principal
+            ge.mudarEstado(GerenciadorEstado.ESTADO_MENU);
         }
     }
     
