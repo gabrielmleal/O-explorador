@@ -35,7 +35,9 @@ public class EstadoLevelConstructor extends Estado {
     private TilePalette tilePalette;
     private MonsterPalette monsterPalette;
     private LevelSettings levelSettings;
+    private LevelEditor levelEditor;
     private boolean showInterfaces = false;
+    private boolean inEditorMode = false;
     
     //construtor, que é construído a partir de um gerenciador de estados
     public EstadoLevelConstructor(GerenciadorEstado ge){
@@ -59,6 +61,7 @@ public class EstadoLevelConstructor extends Estado {
             tilePalette = new TilePalette(20, 150);
             monsterPalette = new MonsterPalette(20, 220);
             levelSettings = new LevelSettings(300, 150);
+            levelEditor = new LevelEditor();
         }
         catch(Exception e){
             e.printStackTrace();
@@ -69,6 +72,7 @@ public class EstadoLevelConstructor extends Estado {
     public void inicializa(){
         escolhaAtual = 0; // Reseta a seleção quando entra no estado
         showInterfaces = false; // Hide interfaces when returning to main menu
+        inEditorMode = false; // Exit editor mode when returning to main menu
     }
     
     //método que atualiza a tela do level constructor
@@ -79,52 +83,57 @@ public class EstadoLevelConstructor extends Estado {
     
     //método que desenha o estado
     public void desenha(Graphics2D g){
-        fundo.desenha(g);//desenha o fundo
-        //define a cor e a fonte do título
-        g.setColor(corTitulo);
-        g.setFont(fonteTitulo);
-        //escreve o título na tela
-        g.drawString("Level Constructor", 90, 100);
-        
-        //muda a fonte para fonte de opções
-        g.setFont(fonteOpcoes);
-        //enquanto i for menor que o número da array da string de opções
-        for(int i=0;i<opcoes.length;i++){
-            if(escolhaAtual==i){/*se a string for a opção atual, então desenhar ela com uma cor diferenciada
-                e desenhar um triângulo que aponte para a opção
-                */
-                g.setColor(corSelecionado);
-                int[] x = {125,125,130};
-                int[] y = {130+20*i-10,130+20*i,130+20*i-5};
-                g.fillPolygon(x,y,3);
-            }
-            else{
-                //caso contrário, simplemente dar a cor padrão de opções
-                g.setColor(corOpcao);
-            }
-            //desenha a string da opção
-            g.drawString(opcoes[i], 140, 130+20*i);
-        }
-        
-        // Draw interface components when appropriate
-        if(showInterfaces) {
-            tilePalette.desenha(g);
-            monsterPalette.desenha(g);
+        if(inEditorMode) {
+            // Draw the level editor
+            levelEditor.desenha(g);
+        } else {
+            fundo.desenha(g);//desenha o fundo
+            //define a cor e a fonte do título
+            g.setColor(corTitulo);
+            g.setFont(fonteTitulo);
+            //escreve o título na tela
+            g.drawString("Level Constructor", 90, 100);
             
-            // Show level settings only for auto-generator
-            if(escolhaAtual == 1) {
-                levelSettings.desenha(g);
-            }
-            
-            // Draw instructions
-            g.setColor(Color.BLACK);
+            //muda a fonte para fonte de opções
             g.setFont(fonteOpcoes);
-            if(escolhaAtual == 0) {
-                g.drawString("Select tiles and monsters, then press SPACE to start manual editor", 20, 320);
-            } else if(escolhaAtual == 1) {
-                g.drawString("Configure settings and press SPACE to auto-generate level", 20, 320);
+            //enquanto i for menor que o número da array da string de opções
+            for(int i=0;i<opcoes.length;i++){
+                if(escolhaAtual==i){/*se a string for a opção atual, então desenhar ela com uma cor diferenciada
+                    e desenhar um triângulo que aponte para a opção
+                    */
+                    g.setColor(corSelecionado);
+                    int[] x = {125,125,130};
+                    int[] y = {130+20*i-10,130+20*i,130+20*i-5};
+                    g.fillPolygon(x,y,3);
+                }
+                else{
+                    //caso contrário, simplemente dar a cor padrão de opções
+                    g.setColor(corOpcao);
+                }
+                //desenha a string da opção
+                g.drawString(opcoes[i], 140, 130+20*i);
             }
-            g.drawString("Press ESC to return to menu", 20, 340);
+            
+            // Draw interface components when appropriate
+            if(showInterfaces) {
+                tilePalette.desenha(g);
+                monsterPalette.desenha(g);
+                
+                // Show level settings only for auto-generator
+                if(escolhaAtual == 1) {
+                    levelSettings.desenha(g);
+                }
+                
+                // Draw instructions
+                g.setColor(Color.BLACK);
+                g.setFont(fonteOpcoes);
+                if(escolhaAtual == 0) {
+                    g.drawString("Select tiles and monsters, then press SPACE to start manual editor", 20, 320);
+                } else if(escolhaAtual == 1) {
+                    g.drawString("Configure settings and press SPACE to auto-generate level", 20, 320);
+                }
+                g.drawString("Press ESC to return to menu", 20, 340);
+            }
         }
     }
     
@@ -149,7 +158,21 @@ public class EstadoLevelConstructor extends Estado {
     
     //sistema de key listener
     public void keyPressed(int k){
-        if(!showInterfaces) {
+        if(inEditorMode) {
+            // Handle editor mode input
+            if(k==KeyEvent.VK_ESCAPE){
+                // ESC exits editor mode back to interface
+                inEditorMode = false;
+                showInterfaces = true;
+            } else if(k==KeyEvent.VK_SPACE) {
+                // SPACE saves level (placeholder for Task 5)
+                // TODO: Implement level saving in Task 5
+            } else {
+                // Pass other keys to level editor
+                levelEditor.handleKeyPressed(k);
+            }
+        }
+        else if(!showInterfaces) {
             // Navigation in main menu
             if(k==KeyEvent.VK_UP){
                 //caso a tecla pressionada seja cima, então decrementar escolha atual
@@ -183,8 +206,12 @@ public class EstadoLevelConstructor extends Estado {
             if(k==KeyEvent.VK_SPACE){
                 // SPACE key starts the actual construction/generation
                 if(escolhaAtual == 0) {
-                    // Manual Constructor - Will be implemented in next task
-                    // TODO: Start manual level editor with selected tiles/monsters
+                    // Manual Constructor - Start level editor
+                    inEditorMode = true;
+                    showInterfaces = false;
+                    // Set selected tile/monster from palettes
+                    levelEditor.setSelectedTile(tilePalette.getSelectedTile());
+                    levelEditor.setSelectedMonster(monsterPalette.getSelectedMonster());
                 }
                 else if(escolhaAtual == 1) {
                     // Auto-generator - Will be implemented in next task
@@ -198,9 +225,27 @@ public class EstadoLevelConstructor extends Estado {
         
     }
     
-    // Mouse event handling for palette interactions
+    // Mouse event handling for palette interactions and editor
     public void mousePressed(MouseEvent e) {
-        if(showInterfaces) {
+        if(inEditorMode) {
+            // Handle level editor mouse clicks
+            int mouseX = e.getX();
+            int mouseY = e.getY();
+            
+            if(levelEditor.handleMouseClick(mouseX, mouseY)) {
+                // Click was handled by editor (tile placed/erased)
+                
+                // Update editor's selected tools if needed
+                if(!levelEditor.isEraseMode()) {
+                    if(levelEditor.isPlacingMonster()) {
+                        levelEditor.setSelectedMonster(monsterPalette.getSelectedMonster());
+                    } else {
+                        levelEditor.setSelectedTile(tilePalette.getSelectedTile());
+                    }
+                }
+            }
+        }
+        else if(showInterfaces) {
             int mouseX = e.getX();
             int mouseY = e.getY();
             
