@@ -36,8 +36,11 @@ public class EstadoLevelConstructor extends Estado {
     private MonsterPalette monsterPalette;
     private LevelSettings levelSettings;
     private LevelEditor levelEditor;
+    private LevelAutoGenerator autoGenerator;
     private boolean showInterfaces = false;
     private boolean inEditorMode = false;
+    private boolean showGeneratedLevel = false;
+    private LevelAutoGenerator.LevelData generatedLevel;
     
     //construtor, que é construído a partir de um gerenciador de estados
     public EstadoLevelConstructor(GerenciadorEstado ge){
@@ -62,6 +65,7 @@ public class EstadoLevelConstructor extends Estado {
             monsterPalette = new MonsterPalette(20, 220);
             levelSettings = new LevelSettings(300, 150);
             levelEditor = new LevelEditor();
+            autoGenerator = new LevelAutoGenerator();
         }
         catch(Exception e){
             e.printStackTrace();
@@ -73,6 +77,8 @@ public class EstadoLevelConstructor extends Estado {
         escolhaAtual = 0; // Reseta a seleção quando entra no estado
         showInterfaces = false; // Hide interfaces when returning to main menu
         inEditorMode = false; // Exit editor mode when returning to main menu
+        showGeneratedLevel = false; // Hide generated level preview
+        generatedLevel = null; // Clear generated level data
     }
     
     //método que atualiza a tela do level constructor
@@ -86,6 +92,9 @@ public class EstadoLevelConstructor extends Estado {
         if(inEditorMode) {
             // Draw the level editor
             levelEditor.desenha(g);
+        } else if(showGeneratedLevel) {
+            // Draw generated level preview
+            drawGeneratedLevel(g);
         } else {
             fundo.desenha(g);//desenha o fundo
             //define a cor e a fonte do título
@@ -172,6 +181,20 @@ public class EstadoLevelConstructor extends Estado {
                 levelEditor.handleKeyPressed(k);
             }
         }
+        else if(showGeneratedLevel) {
+            // Handle generated level preview input
+            if(k==KeyEvent.VK_ESCAPE){
+                // ESC returns to settings interface
+                showGeneratedLevel = false;
+                showInterfaces = true;
+            } else if(k==KeyEvent.VK_SPACE) {
+                // SPACE saves generated level (placeholder for Task 5)
+                // TODO: Implement level saving in Task 5
+            } else if(k==KeyEvent.VK_R) {
+                // R key regenerates level with same settings
+                generateLevel();
+            }
+        }
         else if(!showInterfaces) {
             // Navigation in main menu
             if(k==KeyEvent.VK_UP){
@@ -214,8 +237,8 @@ public class EstadoLevelConstructor extends Estado {
                     levelEditor.setSelectedMonster(monsterPalette.getSelectedMonster());
                 }
                 else if(escolhaAtual == 1) {
-                    // Auto-generator - Will be implemented in next task
-                    // TODO: Start auto-generation with current settings
+                    // Auto-generator - Generate level with current settings
+                    generateLevel();
                 }
             }
         }
@@ -277,5 +300,138 @@ public class EstadoLevelConstructor extends Estado {
     
     public LevelSettings getLevelSettings() {
         return levelSettings;
+    }
+    
+    /**
+     * Generates a level using the auto-generator with current settings
+     */
+    private void generateLevel() {
+        try {
+            int width = levelSettings.getLarguraMapa();
+            int numGrayWolves = levelSettings.getNumLobosCinza();
+            int numRedWolves = levelSettings.getNumLobosVermelhos();
+            
+            // Generate level with specified parameters
+            generatedLevel = autoGenerator.generateLevel(width, numGrayWolves, numRedWolves);
+            
+            // Switch to generated level preview mode
+            showInterfaces = false;
+            showGeneratedLevel = true;
+            
+        } catch (Exception e) {
+            e.printStackTrace();
+            // If generation fails, return to interfaces
+            showInterfaces = true;
+            showGeneratedLevel = false;
+        }
+    }
+    
+    /**
+     * Draws the generated level preview with instructions
+     */
+    private void drawGeneratedLevel(Graphics2D g) {
+        fundo.desenha(g); // Draw background
+        
+        if (generatedLevel != null) {
+            // Draw title
+            g.setColor(corTitulo);
+            g.setFont(fonteTitulo);
+            g.drawString("Generated Level Preview", 90, 30);
+            
+            // Calculate drawing parameters
+            int tileSize = 12; // Smaller tiles for overview
+            int startX = 20;
+            int startY = 60;
+            int viewWidth = Math.min(generatedLevel.width, 40); // Show up to 40 tiles width
+            int viewHeight = Math.min(generatedLevel.height, 15); // Show up to 15 tiles height
+            
+            // Draw tiles
+            for (int y = 0; y < viewHeight; y++) {
+                for (int x = 0; x < viewWidth; x++) {
+                    int tileType = generatedLevel.tiles[y][x];
+                    int drawX = startX + x * tileSize;
+                    int drawY = startY + y * tileSize;
+                    
+                    // Color code different tile types for preview
+                    Color tileColor = getTilePreviewColor(tileType);
+                    g.setColor(tileColor);
+                    g.fillRect(drawX, drawY, tileSize, tileSize);
+                    
+                    // Draw border for non-empty tiles
+                    if (tileType != 0) {
+                        g.setColor(Color.BLACK);
+                        g.drawRect(drawX, drawY, tileSize, tileSize);
+                    }
+                }
+            }
+            
+            // Draw monsters as colored dots
+            for (LevelAutoGenerator.MonsterPosition monster : generatedLevel.monsters) {
+                if (monster.x < viewWidth && monster.y < viewHeight) {
+                    int monsterX = startX + monster.x * tileSize + tileSize/2;
+                    int monsterY = startY + monster.y * tileSize + tileSize/2;
+                    
+                    // Different colors for different monster types
+                    if (monster.type == LevelAutoGenerator.MonsterPosition.TYPE_GRAY_WOLF) {
+                        g.setColor(Color.GRAY);
+                    } else if (monster.type == LevelAutoGenerator.MonsterPosition.TYPE_RED_WOLF) {
+                        g.setColor(Color.RED);
+                    }
+                    
+                    g.fillOval(monsterX - 3, monsterY - 3, 6, 6);
+                    g.setColor(Color.BLACK);
+                    g.drawOval(monsterX - 3, monsterY - 3, 6, 6);
+                }
+            }
+            
+            // Draw level information
+            g.setColor(Color.BLACK);
+            g.setFont(fonteOpcoes);
+            int infoY = startY + viewHeight * tileSize + 30;
+            g.drawString("Level Size: " + generatedLevel.width + " x " + generatedLevel.height, startX, infoY);
+            g.drawString("Gray Wolves: " + levelSettings.getNumLobosCinza(), startX, infoY + 15);
+            g.drawString("Red Wolves: " + levelSettings.getNumLobosVermelhos(), startX, infoY + 30);
+            
+            // Draw instructions
+            g.setColor(Color.BLUE);
+            g.drawString("SPACE: Save level (Task 5)   R: Regenerate   ESC: Back to settings", startX, infoY + 60);
+            
+            // Draw legend
+            int legendX = startX + 300;
+            g.setColor(Color.BLACK);
+            g.drawString("Legend:", legendX, infoY);
+            
+            // Legend items
+            String[] legendItems = {"Ground", "Platform", "Portal", "Gray Wolf", "Red Wolf"};
+            Color[] legendColors = {new Color(139, 69, 19), Color.LIGHT_GRAY, Color.MAGENTA, Color.GRAY, Color.RED};
+            
+            for (int i = 0; i < legendItems.length; i++) {
+                g.setColor(legendColors[i]);
+                g.fillRect(legendX, infoY + 15 + i * 15 - 8, 10, 10);
+                g.setColor(Color.BLACK);
+                g.drawRect(legendX, infoY + 15 + i * 15 - 8, 10, 10);
+                g.drawString(legendItems[i], legendX + 15, infoY + 15 + i * 15);
+            }
+        }
+    }
+    
+    /**
+     * Gets preview color for different tile types
+     */
+    private Color getTilePreviewColor(int tileType) {
+        switch (tileType) {
+            case 0: // Empty
+                return Color.WHITE;
+            case 1: case 2: case 10: // Platform tiles
+                return Color.LIGHT_GRAY;
+            case 3: case 4: case 5: case 6: case 7: case 11: case 12: case 13: // Ground tiles
+                return new Color(139, 69, 19); // Brown for ground
+            case 16: // Portal
+                return Color.MAGENTA;
+            case 15: // Portal support
+                return Color.PINK;
+            default:
+                return Color.CYAN; // Other tiles
+        }
     }
 }
