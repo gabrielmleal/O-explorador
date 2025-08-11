@@ -11,6 +11,7 @@ package ObjetosDoMapa;
  * @author Gabriel
  */
 import ElementosGraficos.Animacao;
+import ElementosGraficos.Bloco;
 import ElementosGraficos.MapaDeBlocos;
 import java.awt.Color;
 import java.awt.Font;
@@ -118,6 +119,42 @@ public class Jogador extends ObjetoMapa {
     
     public void teleporta(){
         teleportando = true;
+    }
+    
+    private double checaColisaoTeleporte(double startX, double destX, double posY) {
+        // Calcula a direção do movimento
+        double stepSize = 8; // tamanho do passo para verificar colisões (pequeno para precisão)
+        double currentX = startX;
+        double direction = destX > startX ? 1 : -1;
+        
+        // Percorre o caminho em pequenos passos
+        while (Math.abs(currentX - destX) > stepSize) {
+            currentX += stepSize * direction;
+            
+            // Calcula os blocos ao redor da posição de teste
+            int blocoEsquerda = (int)(currentX - clargura / 2) / mb.qualTamanhoDoBloco();
+            int blocoDireita = (int)(currentX + clargura / 2 - 1) / mb.qualTamanhoDoBloco();
+            int blocoCima = (int)(posY - caltura / 2) / mb.qualTamanhoDoBloco();
+            int blocoBaixo = (int)(posY + caltura / 2 - 1) / mb.qualTamanhoDoBloco();
+            
+            // Verifica se a posição está dentro dos limites do mapa
+            if (blocoEsquerda >= 0 && blocoDireita < mb.qualNumDeCols() && 
+                blocoCima >= 0 && blocoBaixo < mb.qualNumDeLinhas()) {
+                
+                // Verifica se algum dos blocos ao redor está bloqueado
+                if (mb.qualTipo(blocoCima, blocoEsquerda) == Bloco.BLOQUEADO ||
+                    mb.qualTipo(blocoCima, blocoDireita) == Bloco.BLOQUEADO ||
+                    mb.qualTipo(blocoBaixo, blocoEsquerda) == Bloco.BLOQUEADO ||
+                    mb.qualTipo(blocoBaixo, blocoDireita) == Bloco.BLOQUEADO) {
+                    
+                    // Se encontrou colisão, retorna a última posição válida
+                    return currentX - (stepSize * direction);
+                }
+            }
+        }
+        
+        // Se chegou aqui, o caminho está livre até o destino
+        return destX;
     }
     
     public void tentarPuloDuplo(){
@@ -303,16 +340,15 @@ public class Jogador extends ObjetoMapa {
             }
             
             // Valida se o destino não excede os limites do mapa
-            if(novoX >= clargura/2 && novoX <= mb.qualNumDeCols() * mb.qualTamanhoDoBloco() - clargura/2){
-                mudarPosicaoPara(novoX, y);
-            } else {
-                // Se exceder os limites, teleporta até o limite válido
-                if(olhandoDireita){
-                    mudarPosicaoPara(mb.qualNumDeCols() * mb.qualTamanhoDoBloco() - clargura/2, y);
-                } else {
-                    mudarPosicaoPara(clargura/2, y);
-                }
+            if(novoX < clargura/2) {
+                novoX = clargura/2;
+            } else if(novoX > mb.qualNumDeCols() * mb.qualTamanhoDoBloco() - clargura/2) {
+                novoX = mb.qualNumDeCols() * mb.qualTamanhoDoBloco() - clargura/2;
             }
+            
+            // Checa colisão ao longo do caminho de teleporte
+            double teleportFinalX = checaColisaoTeleporte(x, novoX, y);
+            mudarPosicaoPara(teleportFinalX, y);
             
             teleportando = false;
         }
